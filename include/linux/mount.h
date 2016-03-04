@@ -52,21 +52,29 @@ struct vfsmount
 	struct vfsmount *mnt_parent;	/* fs we are mounted on */
 	//安装点的dentry对象
 	struct dentry *mnt_mountpoint;	/* dentry of mountpoint */
-	//本设备根目录的dentry对象
+	//本文件系统的根目录的dentry对象
 	struct dentry *mnt_root;	/* root of the mounted tree */
+	//本文件系统的 superblock
 	struct super_block *mnt_sb;	/* pointer to superblock */
 	//子文件系统链表的表头
 	struct list_head mnt_mounts;	/* list of children, anchored here */
 	//子文件系统链表的元素
 	struct list_head mnt_child;	/* and going through their mnt_child */
+	//挂载标记--只读，共享等
 	int mnt_flags;
 	/* 4 bytes hole on 64bits arches */
-	char *mnt_devname;		/* Name of device e.g. /dev/dsk/hda1 */
+	char *mnt_devname;		/* Name of device e.g. /dev/dsk/hda1 -- 设备名称 e.g. /dev/dsk/hda1*/
+	//用于加入到namespace的链表
 	struct list_head mnt_list;
+	// 用于加入期限链表 
 	struct list_head mnt_expire;	/* link in fs-specific expiry list */
+	//用于加入到共享链表
 	struct list_head mnt_share;	/* circular list of shared mounts */
+	//所有slave 都加入到这个链表
 	struct list_head mnt_slave_list;/* list of slave mounts */
+	//用于加入到mnt_slave_list
 	struct list_head mnt_slave;	/* slave list entry */
+	//指向master 的指针
 	struct vfsmount *mnt_master;	/* slave is on master->mnt_slave_list */
 	//装载的文件系统所属的命名空间
 	struct mnt_namespace *mnt_ns;	/* containing namespace */

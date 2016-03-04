@@ -1191,11 +1191,10 @@ struct request_sock;
  *
  * This is the main security structure.
  */
-struct security_operations {
+struct security_operations 
+{
 	int (*ptrace) (struct task_struct * parent, struct task_struct * child);
-	int (*capget) (struct task_struct * target,
-		       kernel_cap_t * effective,
-		       kernel_cap_t * inheritable, kernel_cap_t * permitted);
+	int (*capget) (struct task_struct * target, kernel_cap_t * effective, kernel_cap_t * inheritable, kernel_cap_t * permitted);
 	int (*capset_check) (struct task_struct * target,
 			     kernel_cap_t * effective,
 			     kernel_cap_t * inheritable,
@@ -2337,8 +2336,7 @@ static inline int security_unix_may_send(struct socket * sock,
 	return 0;
 }
 
-static inline int security_socket_create (int family, int type,
-					  int protocol, int kern)
+static inline int security_socket_create (int family, int type, int protocol, int kern)
 {
 	return 0;
 }

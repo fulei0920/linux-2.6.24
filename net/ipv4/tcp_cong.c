@@ -336,18 +336,23 @@ void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int flag)
 		tcp_slow_start(tp);
 
 	/* In dangerous area, increase slowly. */
-	else if (sysctl_tcp_abc) {
+	else if (sysctl_tcp_abc) 
+	{
 		/* RFC3465: Appropriate Byte Count
 		 * increase once for each full cwnd acked
 		 */
-		if (tp->bytes_acked >= tp->snd_cwnd*tp->mss_cache) {
+		if (tp->bytes_acked >= tp->snd_cwnd*tp->mss_cache)
+		{
 			tp->bytes_acked -= tp->snd_cwnd*tp->mss_cache;
 			if (tp->snd_cwnd < tp->snd_cwnd_clamp)
 				tp->snd_cwnd++;
 		}
-	} else {
+	} 
+	else 
+	{
 		/* In theory this is tp->snd_cwnd += 1 / tp->snd_cwnd */
-		if (tp->snd_cwnd_cnt >= tp->snd_cwnd) {
+		if (tp->snd_cwnd_cnt >= tp->snd_cwnd) 
+		{
 			if (tp->snd_cwnd < tp->snd_cwnd_clamp)
 				tp->snd_cwnd++;
 			tp->snd_cwnd_cnt = 0;
@@ -373,7 +378,8 @@ u32 tcp_reno_min_cwnd(const struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(tcp_reno_min_cwnd);
 
-struct tcp_congestion_ops tcp_reno = {
+struct tcp_congestion_ops tcp_reno = 
+{
 	.flags		= TCP_CONG_NON_RESTRICTED,
 	.name		= "reno",
 	.owner		= THIS_MODULE,
@@ -386,7 +392,8 @@ struct tcp_congestion_ops tcp_reno = {
  * really reno under another name so we can tell difference
  * during tcp_set_default_congestion_control
  */
-struct tcp_congestion_ops tcp_init_congestion_ops  = {
+struct tcp_congestion_ops tcp_init_congestion_ops  = 
+{
 	.name		= "",
 	.owner		= THIS_MODULE,
 	.ssthresh	= tcp_reno_ssthresh,

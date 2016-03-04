@@ -33,7 +33,8 @@
 #define SEEK_MAX	SEEK_END
 
 /* And dynamically-tunable limits and defaults: */
-struct files_stat_struct {
+struct files_stat_struct 
+{
 	int nr_files;		/* read only */
 	int nr_free_files;	/* read only */
 	int max_files;		/* tunable */

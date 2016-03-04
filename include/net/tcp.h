@@ -763,9 +763,7 @@ static inline __u32 tcp_current_ssthresh(const struct sock *sk)
 	if ((1 << inet_csk(sk)->icsk_ca_state) & (TCPF_CA_CWR | TCPF_CA_Recovery))
 		return tp->snd_ssthresh;
 	else
-		return max(tp->snd_ssthresh,
-			   ((tp->snd_cwnd >> 1) +
-			    (tp->snd_cwnd >> 2)));
+		return max(tp->snd_ssthresh, ((tp->snd_cwnd >> 1) + (tp->snd_cwnd >> 2)));
 }
 
 /* Use define here intentionally to get WARN_ON location shown at the caller */

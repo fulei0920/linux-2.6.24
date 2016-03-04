@@ -842,7 +842,8 @@ void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 
 	tp->prior_ssthresh = 0;
 	tp->bytes_acked = 0;
-	if (icsk->icsk_ca_state < TCP_CA_CWR) {
+	if (icsk->icsk_ca_state < TCP_CA_CWR) 
+	{
 		tp->undo_marker = 0;
 		if (set_ssthresh)
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
@@ -1643,13 +1644,16 @@ void tcp_enter_frto(struct sock *sk)
 		 * RTO is quite unlikely to occur after the first Cumulative ACK
 		 * due to back-off and complexity of triggering events ...
 		 */
-		if (tp->frto_counter) {
+		if (tp->frto_counter)
+		{
 			u32 stored_cwnd;
 			stored_cwnd = tp->snd_cwnd;
 			tp->snd_cwnd = 2;
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
 			tp->snd_cwnd = stored_cwnd;
-		} else {
+		}
+		else 
+		{
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
 		}
 		/* ... in theory, cong.control module could do "any tricks" in
@@ -4697,8 +4701,7 @@ discard:
 	return 0;
 }
 
-static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
-					 struct tcphdr *th, unsigned len)
+static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb, struct tcphdr *th, unsigned len)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);

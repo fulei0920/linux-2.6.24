@@ -47,8 +47,7 @@ void inet_get_local_port_range(int *low, int *high)
 }
 EXPORT_SYMBOL(inet_get_local_port_range);
 
-int inet_csk_bind_conflict(const struct sock *sk,
-			   const struct inet_bind_bucket *tb)
+int inet_csk_bind_conflict(const struct sock *sk, const struct inet_bind_bucket *tb)
 {
 	const __be32 sk_rcv_saddr = inet_rcv_saddr(sk);
 	struct sock *sk2;
@@ -78,10 +77,8 @@ EXPORT_SYMBOL_GPL(inet_csk_bind_conflict);
 /* Obtain a reference to a local port for the given sock,
  * if snum is zero it means select any available local port.
  */
-int inet_csk_get_port(struct inet_hashinfo *hashinfo,
-		      struct sock *sk, unsigned short snum,
-		      int (*bind_conflict)(const struct sock *sk,
-					   const struct inet_bind_bucket *tb))
+int inet_csk_get_port(struct inet_hashinfo *hashinfo, struct sock *sk, unsigned short snum,
+		      int (*bind_conflict)(const struct sock *sk, const struct inet_bind_bucket *tb))
 {
 	struct inet_bind_hashbucket *head;
 	struct hlist_node *node;
@@ -89,7 +86,8 @@ int inet_csk_get_port(struct inet_hashinfo *hashinfo,
 	int ret;
 
 	local_bh_disable();
-	if (!snum) {
+	if (!snum) 
+	{
 		int remaining, rover, low, high;
 
 		inet_get_local_port_range(&low, &high);
@@ -123,7 +121,9 @@ int inet_csk_get_port(struct inet_hashinfo *hashinfo,
 		 * non-NULL and we hold it's mutex.
 		 */
 		snum = rover;
-	} else {
+	} 
+	else 
+	{
 		head = &hashinfo->bhash[inet_bhashfn(snum, hashinfo->bhash_size)];
 		spin_lock(&head->lock);
 		inet_bind_bucket_for_each(tb, node, &head->chain)
@@ -133,13 +133,17 @@ int inet_csk_get_port(struct inet_hashinfo *hashinfo,
 	tb = NULL;
 	goto tb_not_found;
 tb_found:
-	if (!hlist_empty(&tb->owners)) {
+	if (!hlist_empty(&tb->owners)) 
+	{
 		if (sk->sk_reuse > 1)
 			goto success;
 		if (tb->fastreuse > 0 &&
-		    sk->sk_reuse && sk->sk_state != TCP_LISTEN) {
+		    sk->sk_reuse && sk->sk_state != TCP_LISTEN) 
+		{
 			goto success;
-		} else {
+		} 
+		else 
+		{
 			ret = 1;
 			if (bind_conflict(sk, tb))
 				goto fail_unlock;

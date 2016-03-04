@@ -22,7 +22,8 @@
 #include <linux/socket.h>
 
 /* Standard well-defined IP protocols.  */
-enum {
+enum 
+{
   IPPROTO_IP = 0,		/* Dummy protocol for TCP		*/
   IPPROTO_ICMP = 1,		/* Internet Control Message Protocol	*/
   IPPROTO_IGMP = 2,		/* Internet Group Management Protocol	*/

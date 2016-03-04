@@ -24,7 +24,8 @@
 #include <asm/atomic.h>
 
 /* sysctl tunables... */
-struct files_stat_struct files_stat = {
+struct files_stat_struct files_stat = 
+{
 	.max_files = NR_FILE
 };
 
@@ -95,7 +96,8 @@ struct file *get_empty_filp(void)
 	/*
 	 * Privileged users can go above max_files
 	 */
-	if (get_nr_files() >= files_stat.max_files && !capable(CAP_SYS_ADMIN)) {
+	if (get_nr_files() >= files_stat.max_files && !capable(CAP_SYS_ADMIN)) 
+	{
 		/*
 		 * percpu_counters are inaccurate.  Do an expensive check before
 		 * we go and fail.

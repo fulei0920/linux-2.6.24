@@ -83,7 +83,8 @@ struct inet_bind_bucket {
 #define inet_bind_bucket_for_each(tb, node, head) \
 	hlist_for_each_entry(tb, node, head, node)
 
-struct inet_bind_hashbucket {
+struct inet_bind_hashbucket 
+{
 	spinlock_t		lock;
 	struct hlist_head	chain;
 };

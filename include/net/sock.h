@@ -114,7 +114,7 @@ struct proto;
 struct sock_common {
 	unsigned short		skc_family;
 	volatile unsigned char	skc_state;
-	unsigned char		skc_reuse;
+	unsigned char		skc_reuse;			//ports reusable	
 	int			skc_bound_dev_if;
 	struct hlist_node	skc_node;
 	struct hlist_node	skc_bind_node;
@@ -201,11 +201,11 @@ struct sock
 #define sk_prot			__sk_common.skc_prot
 #define sk_net			__sk_common.skc_net
 	unsigned char		sk_shutdown : 2,
-				sk_no_check : 2,
+				sk_no_check : 2,			// checksum on rcv/xmit/none? 
 				sk_userlocks : 4;
 	unsigned char		sk_protocol;
 	unsigned short		sk_type;
-	int			sk_rcvbuf;
+	int			sk_rcvbuf;					//size of receive buffer in bytes
 	socket_lock_t		sk_lock;
 	/*
 	 * The backlog queue is special, it is always used with
@@ -738,7 +738,8 @@ static inline struct kiocb *siocb_to_kiocb(struct sock_iocb *si)
 	return si->kiocb;
 }
 
-struct socket_alloc {
+struct socket_alloc 
+{
 	struct socket socket;
 	struct inode vfs_inode;
 };

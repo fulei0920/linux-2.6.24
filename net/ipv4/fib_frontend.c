@@ -172,9 +172,11 @@ unsigned inet_addr_type(__be32 addr)
 #endif
 
 	local_table = fib_get_table(RT_TABLE_LOCAL);
-	if (local_table) {
+	if (local_table)
+	{
 		ret = RTN_UNICAST;
-		if (!local_table->tb_lookup(local_table, &fl, &res)) {
+		if (!local_table->tb_lookup(local_table, &fl, &res)) 
+		{
 			ret = res.type;
 			fib_res_put(&res);
 		}

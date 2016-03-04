@@ -280,23 +280,22 @@ static int init_inodecache(void)
 	return 0;
 }
 
-static struct super_operations sockfs_ops = {
+static struct super_operations sockfs_ops = 
+{
 	.alloc_inode =	sock_alloc_inode,
 	.destroy_inode =sock_destroy_inode,
 	.statfs =	simple_statfs,
 };
 
-static int sockfs_get_sb(struct file_system_type *fs_type,
-			 int flags, const char *dev_name, void *data,
-			 struct vfsmount *mnt)
+static int sockfs_get_sb(struct file_system_type *fs_type, int flags, const char *dev_name, void *data, struct vfsmount *mnt)
 {
-	return get_sb_pseudo(fs_type, "socket:", &sockfs_ops, SOCKFS_MAGIC,
-			     mnt);
+	return get_sb_pseudo(fs_type, "socket:", &sockfs_ops, SOCKFS_MAGIC, mnt);
 }
 
 static struct vfsmount *sock_mnt __read_mostly;
 
-static struct file_system_type sock_fs_type = {
+static struct file_system_type sock_fs_type = 
+{
 	.name =		"sockfs",
 	.get_sb =	sockfs_get_sb,
 	.kill_sb =	kill_anon_super,
@@ -323,7 +322,8 @@ static char *sockfs_dname(struct dentry *dentry, char *buffer, int buflen)
 				dentry->d_inode->i_ino);
 }
 
-static struct dentry_operations sockfs_dentry_operations = {
+static struct dentry_operations sockfs_dentry_operations = 
+	{
 	.d_delete = sockfs_delete_dentry,
 	.d_dname  = sockfs_dname,
 };
@@ -350,16 +350,22 @@ static int sock_alloc_fd(struct file **filep)
 	int fd;
 
 	fd = get_unused_fd();
-	if (likely(fd >= 0)) {
+	if (likely(fd >= 0))
+	{
 		struct file *file = get_empty_filp();
 
 		*filep = file;
-		if (unlikely(!file)) {
+		if (unlikely(!file)) 
+		{
 			put_unused_fd(fd);
 			return -ENFILE;
 		}
-	} else
+	} 
+	else
+	{
 		*filep = NULL;
+	}
+		
 	return fd;
 }
 
@@ -396,10 +402,12 @@ int sock_map_fd(struct socket *sock)
 	struct file *newfile;
 	int fd = sock_alloc_fd(&newfile);
 
-	if (likely(fd >= 0)) {
+	if (likely(fd >= 0))
+	{
 		int err = sock_attach_fd(sock, newfile);
 
-		if (unlikely(err < 0)) {
+		if (unlikely(err < 0))
+		{
 			put_filp(newfile);
 			put_unused_fd(fd);
 			return err;
@@ -455,7 +463,8 @@ static struct socket *sockfd_lookup_light(int fd, int *err, int *fput_needed)
 
 	*err = -EBADF;
 	file = fget_light(fd, fput_needed);
-	if (file) {
+	if (file) 
+	{
 		sock = sock_from_file(file, err);
 		if (sock)
 			return sock;
@@ -1081,8 +1090,7 @@ call_kill:
 	return 0;
 }
 
-static int __sock_create(struct net *net, int family, int type, int protocol,
-			 struct socket **res, int kern)
+static int __sock_create(struct net *net, int family, int type, int protocol, struct socket **res, int kern)
 {
 	int err;
 	struct socket *sock;
@@ -1101,12 +1109,13 @@ static int __sock_create(struct net *net, int family, int type, int protocol,
 	   This uglymoron is moved from INET layer to here to avoid
 	   deadlock in module load.
 	 */
-	if (family == PF_INET && type == SOCK_PACKET) {
+	if (family == PF_INET && type == SOCK_PACKET)
+	{
 		static int warned;
-		if (!warned) {
+		if (!warned)
+		{
 			warned = 1;
-			printk(KERN_INFO "%s uses obsolete (PF_INET,SOCK_PACKET)\n",
-			       current->comm);
+			printk(KERN_INFO "%s uses obsolete (PF_INET,SOCK_PACKET)\n", current->comm);
 		}
 		family = PF_PACKET;
 	}
@@ -1121,11 +1130,11 @@ static int __sock_create(struct net *net, int family, int type, int protocol,
 	 *	default.
 	 */
 	sock = sock_alloc();
-	if (!sock) {
+	if (!sock) 
+	{
 		if (net_ratelimit())
 			printk(KERN_WARNING "socket: no more sockets\n");
-		return -ENFILE;	/* Not exactly a match, but its the
-				   closest posix thing */
+		return -ENFILE;	/* Not exactly a match, but its the closest posix thing */
 	}
 
 	sock->type = type;
@@ -1336,16 +1345,14 @@ asmlinkage long sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
-	if (sock) {
+	if (sock) 
+	{
 		err = move_addr_to_kernel(umyaddr, addrlen, address);
-		if (err >= 0) {
-			err = security_socket_bind(sock,
-						   (struct sockaddr *)address,
-						   addrlen);
+		if (err >= 0) 
+		{
+			err = security_socket_bind(sock, (struct sockaddr *)address, addrlen);
 			if (!err)
-				err = sock->ops->bind(sock,
-						      (struct sockaddr *)
-						      address, addrlen);
+				err = sock->ops->bind(sock, (struct sockaddr *) address, addrlen);
 		}
 		fput_light(sock->file, fput_needed);
 	}
@@ -2111,7 +2118,8 @@ int sock_register(const struct net_proto_family *ops)
 {
 	int err;
 
-	if (ops->family >= NPROTO) {
+	if (ops->family >= NPROTO) 
+	{
 		printk(KERN_CRIT "protocol %d >= NPROTO(%d)\n", ops->family,
 		       NPROTO);
 		return -ENOBUFS;
@@ -2119,8 +2127,11 @@ int sock_register(const struct net_proto_family *ops)
 
 	spin_lock(&net_family_lock);
 	if (net_families[ops->family])
+	{
 		err = -EEXIST;
-	else {
+	}
+	else 
+	{
 		net_families[ops->family] = ops;
 		err = 0;
 	}

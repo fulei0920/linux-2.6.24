@@ -120,8 +120,7 @@ DEFINE_SNMP_STAT(struct linux_mib, net_statistics) __read_mostly;
 
 extern void ip_mc_drop_socket(struct sock *sk);
 
-/* The inetsw table contains everything that inet_create needs to
- * build a new socket.
+/* The inetsw table contains everything that inet_create needs to build a new socket.
  */
 static struct list_head inetsw[SOCK_MAX];
 static DEFINE_SPINLOCK(inetsw_lock);
@@ -135,9 +134,9 @@ void inet_sock_destruct(struct sock *sk)
 	__skb_queue_purge(&sk->sk_receive_queue);
 	__skb_queue_purge(&sk->sk_error_queue);
 
-	if (sk->sk_type == SOCK_STREAM && sk->sk_state != TCP_CLOSE) {
-		printk("Attempt to release TCP socket in state %d %p\n",
-		       sk->sk_state, sk);
+	if (sk->sk_type == SOCK_STREAM && sk->sk_state != TCP_CLOSE) 
+	{
+		printk("Attempt to release TCP socket in state %d %p\n", sk->sk_state, sk);
 		return;
 	}
 	if (!sock_flag(sk, SOCK_DEAD)) {
@@ -256,9 +255,7 @@ static int inet_create(struct net *net, struct socket *sock, int protocol)
 	if (net != &init_net)
 		return -EAFNOSUPPORT;
 
-	if (sock->type != SOCK_RAW &&
-	    sock->type != SOCK_DGRAM &&
-	    !inet_ehash_secret)
+	if (sock->type != SOCK_RAW && sock->type != SOCK_DGRAM && !inet_ehash_secret)
 		build_ehash_secret();
 
 	sock->state = SS_UNCONNECTED;
@@ -268,16 +265,22 @@ static int inet_create(struct net *net, struct socket *sock, int protocol)
 lookup_protocol:
 	err = -ESOCKTNOSUPPORT;
 	rcu_read_lock();
-	list_for_each_rcu(p, &inetsw[sock->type]) {
+	list_for_each_rcu(p, &inetsw[sock->type]) 
+	{
 		answer = list_entry(p, struct inet_protosw, list);
-
+		//answer->protocol指定的如果是通配的(IPPROTO_IP), 用户必须指定具体的(IPPROTO_TCP/IPPROTO_UDP)
+		//answer->protocol指定的如果是具体的, 用户可以指定与answer->protocol指定的一样，或者指定通配的(IPPROTO_IP)
 		/* Check the non-wild match. */
-		if (protocol == answer->protocol) {
+		if (protocol == answer->protocol) 
+		{
 			if (protocol != IPPROTO_IP)
 				break;
-		} else {
+		} 
+		else 
+		{
 			/* Check for the two wild cases. */
-			if (IPPROTO_IP == protocol) {
+			if (IPPROTO_IP == protocol) 
+			{
 				protocol = answer->protocol;
 				break;
 			}
@@ -288,23 +291,23 @@ lookup_protocol:
 		answer = NULL;
 	}
 
-	if (unlikely(answer == NULL)) {
-		if (try_loading_module < 2) {
+	if (unlikely(answer == NULL)) 
+	{
+		if (try_loading_module < 2) 
+		{
 			rcu_read_unlock();
 			/*
 			 * Be more specific, e.g. net-pf-2-proto-132-type-1
 			 * (net-pf-PF_INET-proto-IPPROTO_SCTP-type-SOCK_STREAM)
 			 */
 			if (++try_loading_module == 1)
-				request_module("net-pf-%d-proto-%d-type-%d",
-					       PF_INET, protocol, sock->type);
+				request_module("net-pf-%d-proto-%d-type-%d", PF_INET, protocol, sock->type);
 			/*
 			 * Fall back to generic, e.g. net-pf-2-proto-132
 			 * (net-pf-PF_INET-proto-IPPROTO_SCTP)
 			 */
 			else
-				request_module("net-pf-%d-proto-%d",
-					       PF_INET, protocol);
+				request_module("net-pf-%d-proto-%d", PF_INET, protocol);
 			goto lookup_protocol;
 		} else
 			goto out_rcu_unlock;
@@ -335,7 +338,8 @@ lookup_protocol:
 	inet = inet_sk(sk);
 	inet->is_icsk = (INET_PROTOSW_ICSK & answer_flags) != 0;
 
-	if (SOCK_RAW == sock->type) {
+	if (SOCK_RAW == sock->type) 
+	{
 		inet->num = protocol;
 		if (IPPROTO_RAW == protocol)
 			inet->hdrincl = 1;
@@ -363,7 +367,8 @@ lookup_protocol:
 
 	sk_refcnt_debug_inc(sk);
 
-	if (inet->num) {
+	if (inet->num)
+	{
 		/* It assumes that any protocol which allows
 		 * the user to assign a number at socket
 		 * creation time automatically
@@ -374,7 +379,8 @@ lookup_protocol:
 		sk->sk_prot->hash(sk);
 	}
 
-	if (sk->sk_prot->init) {
+	if (sk->sk_prot->init)
+	{
 		err = sk->sk_prot->init(sk);
 		if (err)
 			sk_common_release(sk);
@@ -432,7 +438,8 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	int err;
 
 	/* If the socket has its own bind function then use it. (RAW) */
-	if (sk->sk_prot->bind) {
+	if (sk->sk_prot->bind)
+	{
 		err = sk->sk_prot->bind(sk, uaddr, addr_len);
 		goto out;
 	}
@@ -482,7 +489,8 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		inet->saddr = 0;  /* Use device */
 
 	/* Make sure we are allowed to bind here. */
-	if (sk->sk_prot->get_port(sk, snum)) {
+	if (sk->sk_prot->get_port(sk, snum))
+	{
 		inet->saddr = inet->rcv_saddr = 0;
 		err = -EADDRINUSE;
 		goto out_release_sock;
@@ -899,7 +907,8 @@ static const struct proto_ops inet_sockraw_ops = {
 #endif
 };
 
-static struct net_proto_family inet_family_ops = {
+static struct net_proto_family inet_family_ops = 
+{
 	.family = PF_INET,
 	.create = inet_create,
 	.owner	= THIS_MODULE,
@@ -915,8 +924,7 @@ static struct inet_protosw inetsw_array[] =
 		.ops =        &inet_stream_ops,
 		.capability = -1,
 		.no_check =   0,
-		.flags =      INET_PROTOSW_PERMANENT |
-			      INET_PROTOSW_ICSK,
+		.flags =      INET_PROTOSW_PERMANENT | INET_PROTOSW_ICSK,
 	},
 
 	{
@@ -958,11 +966,13 @@ void inet_register_protosw(struct inet_protosw *p)
 	/* If we are trying to override a permanent protocol, bail. */
 	answer = NULL;
 	last_perm = &inetsw[p->type];
-	list_for_each(lh, &inetsw[p->type]) {
+	list_for_each(lh, &inetsw[p->type])
+	{
 		answer = list_entry(lh, struct inet_protosw, list);
 
 		/* Check only the non-wild match. */
-		if (INET_PROTOSW_PERMANENT & answer->flags) {
+		if (INET_PROTOSW_PERMANENT & answer->flags)
+		{
 			if (protocol == answer->protocol)
 				break;
 			last_perm = lh;

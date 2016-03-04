@@ -314,11 +314,22 @@ struct tcp_sock
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
  */
- 	u32	snd_ssthresh;	/* Slow start size threshold		*/
- 	u32	snd_cwnd;	/* Sending congestion window		*/
-	u32	snd_cwnd_cnt;	/* Linear increase counter		*/
-	u32	snd_cwnd_clamp; /* Do not allow snd_cwnd to grow above this */
+ 	///Slow start size threshold
+ 	//Slow start threshold. We are in slow start if snd_cwnd is less than this. 
+ 	u32	snd_ssthresh;	
+	//Sending congestion window	
+	//The size of the congestion window 
+ 	u32	snd_cwnd;		
+	//Linear increase counter		
+	//A counter used to slow down the rate of increase once we exceed slow start threshold.
+	u32	snd_cwnd_cnt;	
+	//This is the maximum size that snd_cwnd can grow to.
+	//Do not allow snd_cwnd to grow above this
+	u32	snd_cwnd_clamp; 
+	//Used as a highwater mark for how much of the congestion window is in use. 
+	//It is used to adjust snd_cwnd down when the link is limited by the application rather than the network.
 	u32	snd_cwnd_used;
+	//Timestamp for when congestion window last validated. 
 	u32	snd_cwnd_stamp;
 
 	struct sk_buff_head	out_of_order_queue; /* Out of order segments go here */

@@ -870,8 +870,7 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 #endif
 }
 
-static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
-		int family)
+static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority, int family)
 {
 	struct sock *sk;
 	struct kmem_cache *slab;
@@ -882,7 +881,8 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 	else
 		sk = kmalloc(prot->obj_size, priority);
 
-	if (sk != NULL) {
+	if (sk != NULL) 
+	{
 		if (security_sk_alloc(sk, family, priority))
 			goto out_free;
 
@@ -926,13 +926,13 @@ static void sk_prot_free(struct proto *prot, struct sock *sk)
  *	@prot: struct proto associated with this new sock instance
  *	@zero_it: if we should zero the newly allocated sock
  */
-struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
-		      struct proto *prot)
+struct sock *sk_alloc(struct net *net, int family, gfp_t priority, struct proto *prot)
 {
 	struct sock *sk;
 
 	sk = sk_prot_alloc(prot, priority | __GFP_ZERO, family);
-	if (sk) {
+	if (sk) 
+	{
 		sk->sk_family = family;
 		/*
 		 * See comment in struct sock definition to understand
@@ -1578,18 +1578,21 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 
 	sock_set_flag(sk, SOCK_ZAPPED);
 
-	if (sock) {
+	if (sock) 
+	{
 		sk->sk_type	=	sock->type;
 		sk->sk_sleep	=	&sock->wait;
 		sock->sk	=	sk;
-	} else
+	} 
+	else
+	{
 		sk->sk_sleep	=	NULL;
+	}
+		
 
 	rwlock_init(&sk->sk_dst_lock);
 	rwlock_init(&sk->sk_callback_lock);
-	lockdep_set_class_and_name(&sk->sk_callback_lock,
-			af_callback_keys + sk->sk_family,
-			af_family_clock_key_strings[sk->sk_family]);
+	lockdep_set_class_and_name(&sk->sk_callback_lock, af_callback_keys + sk->sk_family, af_family_clock_key_strings[sk->sk_family]);
 
 	sk->sk_state_change	=	sock_def_wakeup;
 	sk->sk_data_ready	=	sock_def_readable;

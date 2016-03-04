@@ -943,9 +943,7 @@ static inline void dummy_key_free(struct key *key)
 {
 }
 
-static inline int dummy_key_permission(key_ref_t key_ref,
-				       struct task_struct *context,
-				       key_perm_t perm)
+static inline int dummy_key_permission(key_ref_t key_ref, struct task_struct *context, key_perm_t perm)
 {
 	return 0;
 }

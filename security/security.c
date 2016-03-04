@@ -38,7 +38,8 @@ static void __init do_security_initcalls(void)
 {
 	initcall_t *call;
 	call = __security_initcall_start;
-	while (call < __security_initcall_end) {
+	while (call < __security_initcall_end) 
+	{
 		(*call) ();
 		call++;
 	}
@@ -53,9 +54,9 @@ int __init security_init(void)
 {
 	printk(KERN_INFO "Security Framework initialized\n");
 
-	if (verify(&dummy_security_ops)) {
-		printk(KERN_ERR "%s could not verify "
-		       "dummy_security_ops structure.\n", __FUNCTION__);
+	if (verify(&dummy_security_ops)) 
+	{
+		printk(KERN_ERR "%s could not verify dummy_security_ops structure.\n", __FUNCTION__);
 		return -EIO;
 	}
 

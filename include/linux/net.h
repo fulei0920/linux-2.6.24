@@ -81,7 +81,8 @@ typedef enum {
  * grep ARCH_HAS_SOCKET_TYPE include/asm-* /socket.h, at least MIPS
  * overrides this enum for binary compat reasons.
  */
-enum sock_type {
+enum sock_type 
+{
 	SOCK_STREAM	= 1,
 	SOCK_DGRAM	= 2,
 	SOCK_RAW	= 3,
@@ -144,14 +145,9 @@ struct proto_ops
 	int		family;
 	struct module	*owner;
 	int		(*release)   (struct socket *sock);
-	int		(*bind)	     (struct socket *sock,
-				      struct sockaddr *myaddr,
-				      int sockaddr_len);
-	int		(*connect)   (struct socket *sock,
-				      struct sockaddr *vaddr,
-				      int sockaddr_len, int flags);
-	int		(*socketpair)(struct socket *sock1,
-				      struct socket *sock2);
+	int		(*bind)	     (struct socket *sock, struct sockaddr *myaddr, int sockaddr_len);
+	int		(*connect)   (struct socket *sock, struct sockaddr *vaddr, int sockaddr_len, int flags);
+	int		(*socketpair)(struct socket *sock1, struct socket *sock2);
 	int		(*accept)    (struct socket *sock,
 				      struct socket *newsock, int flags);
 	int		(*getname)   (struct socket *sock,
@@ -184,7 +180,8 @@ struct proto_ops
 				      int offset, size_t size, int flags);
 };
 
-struct net_proto_family {
+struct net_proto_family 
+{
 	int		family;
 	int		(*create)(struct net *net, struct socket *sock, int protocol);
 	struct module	*owner;

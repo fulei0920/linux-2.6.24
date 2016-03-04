@@ -185,8 +185,7 @@ typedef __u32 kernel_cap_t;
 #define CAP_NET_RAW          13
 
 /* Allow locking of shared memory segments */
-/* Allow mlock and mlockall (which doesn't really have anything to do
-   with IPC) */
+/* Allow mlock and mlockall (which doesn't really have anything to do with IPC) */
 
 #define CAP_IPC_LOCK         14
 

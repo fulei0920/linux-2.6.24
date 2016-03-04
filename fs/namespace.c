@@ -37,6 +37,7 @@ static int event;
 
 static struct list_head *mount_hashtable __read_mostly;
 static int hash_mask __read_mostly, hash_bits __read_mostly;
+//用于分配/回收 struct vfsmount结构体
 static struct kmem_cache *mnt_cache __read_mostly;
 static struct rw_semaphore namespace_sem;
 
@@ -1835,8 +1836,7 @@ void __init mnt_init(void)
 
 	init_rwsem(&namespace_sem);
 
-	mnt_cache = kmem_cache_create("mnt_cache", sizeof(struct vfsmount),
-					0, SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
+	mnt_cache = kmem_cache_create("mnt_cache", sizeof(struct vfsmount), 0, SLAB_HWCACHE_ALIGN | SLAB_PANIC, NULL);
 
 	mount_hashtable = (struct list_head *)__get_free_page(GFP_ATOMIC);
 
