@@ -66,7 +66,8 @@ typedef struct tvec_root_s {
 	struct list_head vec[TVR_SIZE];
 } tvec_root_t;
 
-struct tvec_t_base_s {
+struct tvec_t_base_s
+{
 	spinlock_t lock;
 	struct timer_list *running_timer;
 	unsigned long timer_jiffies;

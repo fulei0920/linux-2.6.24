@@ -38,8 +38,7 @@ static void tcp_keepalive_timer (unsigned long data);
 
 void tcp_init_xmit_timers(struct sock *sk)
 {
-	inet_csk_init_xmit_timers(sk, &tcp_write_timer, &tcp_delack_timer,
-				  &tcp_keepalive_timer);
+	inet_csk_init_xmit_timers(sk, &tcp_write_timer, &tcp_delack_timer, &tcp_keepalive_timer);
 }
 
 EXPORT_SYMBOL(tcp_init_xmit_timers);
@@ -115,6 +114,8 @@ static int tcp_orphan_retries(struct sock *sk, int alive)
 }
 
 /* A write timeout has occurred. Process the after effects. */
+//判断我们重传的次数是否超过了重传的最大次数
+//返回值: 1--超过  0--未超过
 static int tcp_write_timeout(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -122,20 +123,29 @@ static int tcp_write_timeout(struct sock *sk)
 	int retry_until;
 	int mss;
 
-	if ((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV)) {
+	//SYN分节的重传
+	if ((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV))	
+	{
 		if (icsk->icsk_retransmits)
 			dst_negative_advice(&sk->sk_dst_cache);
 		retry_until = icsk->icsk_syn_retries ? : sysctl_tcp_syn_retries;
-	} else {
-		if (icsk->icsk_retransmits >= sysctl_tcp_retries1) {
+	}
+	//数据的重传
+	else 
+	{
+		if (icsk->icsk_retransmits >= sysctl_tcp_retries1)
+		{
 			/* Black hole detection */
-			if (sysctl_tcp_mtu_probing) {
-				if (!icsk->icsk_mtup.enabled) {
+			if (sysctl_tcp_mtu_probing)
+			{
+				if (!icsk->icsk_mtup.enabled) 
+				{
 					icsk->icsk_mtup.enabled = 1;
 					tcp_sync_mss(sk, icsk->icsk_pmtu_cookie);
-				} else {
-					mss = min(sysctl_tcp_base_mss,
-						  tcp_mtu_to_mss(sk, icsk->icsk_mtup.search_low)/2);
+				} 
+				else 
+				{
+					mss = min(sysctl_tcp_base_mss, tcp_mtu_to_mss(sk, icsk->icsk_mtup.search_low)/2);
 					mss = max(mss, 68 - tp->tcp_header_len);
 					icsk->icsk_mtup.search_low = tcp_mss_to_mtu(sk, mss);
 					tcp_sync_mss(sk, icsk->icsk_pmtu_cookie);
@@ -146,7 +156,10 @@ static int tcp_write_timeout(struct sock *sk)
 		}
 
 		retry_until = sysctl_tcp_retries2;
-		if (sock_flag(sk, SOCK_DEAD)) {
+
+		//处理是孤立的socket的情况
+		if (sock_flag(sk, SOCK_DEAD)) 
+		{
 			const int alive = (icsk->icsk_rto < TCP_RTO_MAX);
 
 			retry_until = tcp_orphan_retries(sk, alive);
@@ -156,7 +169,8 @@ static int tcp_write_timeout(struct sock *sk)
 		}
 	}
 
-	if (icsk->icsk_retransmits >= retry_until) {
+	if (icsk->icsk_retransmits >= retry_until)
+	{
 		/* Has it gone just too far? */
 		tcp_write_err(sk);
 		return 1;
@@ -190,7 +204,8 @@ static void tcp_delack_timer(unsigned long data)
 	}
 	icsk->icsk_ack.pending &= ~ICSK_ACK_TIMER;
 
-	if (!skb_queue_empty(&tp->ucopy.prequeue)) {
+	if (!skb_queue_empty(&tp->ucopy.prequeue))
+	{
 		struct sk_buff *skb;
 
 		NET_INC_STATS_BH(LINUX_MIB_TCPSCHEDULERFAILED);
@@ -273,81 +288,100 @@ static void tcp_probe_timer(struct sock *sk)
 /*
  *	The TCP retransmit timer.
  */
-
+ 
 static void tcp_retransmit_timer(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
+	///如果没有需要确认的段，则什么也不做。  
 	if (!tp->packets_out)
 		goto out;
 
 	BUG_TRAP(!tcp_write_queue_empty(sk));
-
-	if (!tp->snd_wnd && !sock_flag(sk, SOCK_DEAD) &&
-	    !((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV))) {
+	//首先进行一些合法性判断，其中:  
+ 	///snd_wnd为窗口大小。  
+ 	///sock_flag用来判断sock的状态。  
+ 	//最后一个判断是当前的连接状态不能处于syn_sent和syn_recv状态,也就是连接还未建立状态.  
+	if (!tp->snd_wnd && !sock_flag(sk, SOCK_DEAD) && !((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV)))
+	{
 		/* Receiver dastardly shrinks window. Our retransmits
 		 * become zero probes, but we should not timeout this
 		 * connection. If the socket is an orphan, time it out,
 		 * we cannot allow such beasts to hang infinitely.
 		 */
 #ifdef TCP_DEBUG
-		if (1) {
+		if (1)
+		{
 			struct inet_sock *inet = inet_sk(sk);
 			LIMIT_NETDEBUG(KERN_DEBUG "TCP: Treason uncloaked! Peer %u.%u.%u.%u:%u/%u shrinks window %u:%u. Repaired.\n",
-			       NIPQUAD(inet->daddr), ntohs(inet->dport),
-			       inet->num, tp->snd_una, tp->snd_nxt);
+			       NIPQUAD(inet->daddr), ntohs(inet->dport), inet->num, tp->snd_una, tp->snd_nxt);
 		}
 #endif
-		if (tcp_time_stamp - tp->rcv_tstamp > TCP_RTO_MAX) {
+		if (tcp_time_stamp - tp->rcv_tstamp > TCP_RTO_MAX)
+		{
 			tcp_write_err(sk);
 			goto out;
 		}
+		///这个函数用来进入loss状态，也就是进行一些拥塞以及流量的控制。
 		tcp_enter_loss(sk, 0);
+		///现在开始重传skb。
 		tcp_retransmit_skb(sk, tcp_write_queue_head(sk));
+		///然后重启定时器，继续等待ack的到来。 
 		__sk_dst_reset(sk);
 		goto out_reset_timer;
 	}
 
+	//判断我们重传需要的次数。如果超过了重传次数，直接跳转到out。  
 	if (tcp_write_timeout(sk))
 		goto out;
 
-	if (icsk->icsk_retransmits == 0) {
-		if (icsk->icsk_ca_state == TCP_CA_Disorder ||
-		    icsk->icsk_ca_state == TCP_CA_Recovery) {
-			if (tcp_is_sack(tp)) {
+	//收集一些统计信息
+	if (icsk->icsk_retransmits == 0)
+	{
+		if (icsk->icsk_ca_state == TCP_CA_Disorder || icsk->icsk_ca_state == TCP_CA_Recovery) 
+		{
+			if (tcp_is_sack(tp))
+			{
 				if (icsk->icsk_ca_state == TCP_CA_Recovery)
 					NET_INC_STATS_BH(LINUX_MIB_TCPSACKRECOVERYFAIL);
 				else
 					NET_INC_STATS_BH(LINUX_MIB_TCPSACKFAILURES);
-			} else {
+			} 
+			else 
+			{
 				if (icsk->icsk_ca_state == TCP_CA_Recovery)
 					NET_INC_STATS_BH(LINUX_MIB_TCPRENORECOVERYFAIL);
 				else
 					NET_INC_STATS_BH(LINUX_MIB_TCPRENOFAILURES);
 			}
-		} else if (icsk->icsk_ca_state == TCP_CA_Loss) {
+		} 
+		else if (icsk->icsk_ca_state == TCP_CA_Loss)
+		{
 			NET_INC_STATS_BH(LINUX_MIB_TCPLOSSFAILURES);
-		} else {
+		}
+		else
+		{
 			NET_INC_STATS_BH(LINUX_MIB_TCPTIMEOUTS);
 		}
 	}
 
-	if (tcp_use_frto(sk)) {
+	if (tcp_use_frto(sk)) 
+	{
 		tcp_enter_frto(sk);
-	} else {
+	} 
+	else
+	{
 		tcp_enter_loss(sk, 0);
 	}
 
-	if (tcp_retransmit_skb(sk, tcp_write_queue_head(sk)) > 0) {
-		/* Retransmission failed because of local congestion,
-		 * do not backoff.
-		 */
+	/// 再次尝试重传队列的第一个段
+	if (tcp_retransmit_skb(sk, tcp_write_queue_head(sk)) > 0) 
+	{
+		/* Retransmission failed because of local congestion,  do not backoff.*/
 		if (!icsk->icsk_retransmits)
 			icsk->icsk_retransmits = 1;
-		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-					  min(icsk->icsk_rto, TCP_RESOURCE_PROBE_INTERVAL),
-					  TCP_RTO_MAX);
+		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, min(icsk->icsk_rto, TCP_RESOURCE_PROBE_INTERVAL), TCP_RTO_MAX);
 		goto out;
 	}
 
@@ -366,10 +400,12 @@ static void tcp_retransmit_timer(struct sock *sk)
 	 * implemented ftp to mars will work nicely. We will have to fix
 	 * the 120 second clamps though!
 	 */
+	///icsk->icsk_backoff主要用在零窗口定时器
 	icsk->icsk_backoff++;
 	icsk->icsk_retransmits++;
 
 out_reset_timer:
+	//要注意，重传的时候为了防止确认二义性，使用karn算法，也就是定时器退避策略
 	icsk->icsk_rto = min(icsk->icsk_rto << 1, TCP_RTO_MAX);
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, icsk->icsk_rto, TCP_RTO_MAX);
 	if (icsk->icsk_retransmits > sysctl_tcp_retries1)
@@ -383,9 +419,11 @@ static void tcp_write_timer(unsigned long data)
 	struct sock *sk = (struct sock*)data;
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	int event;
-
+	///首先加锁。
 	bh_lock_sock(sk);
-	if (sock_owned_by_user(sk)) {
+	///如果是进程上下文则什么也不做。
+	if (sock_owned_by_user(sk))
+	{
 		/* Try again later */
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, jiffies + (HZ / 20));
 		goto out_unlock;
@@ -394,7 +432,9 @@ static void tcp_write_timer(unsigned long data)
 	if (sk->sk_state == TCP_CLOSE || !icsk->icsk_pending)
 		goto out;
 
-	if (time_after(icsk->icsk_timeout, jiffies)) {
+	//若定时器未到期，重置为到期时间
+	if (time_after(icsk->icsk_timeout, jiffies)) 
+	{
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, icsk->icsk_timeout);
 		goto out;
 	}
@@ -402,7 +442,8 @@ static void tcp_write_timer(unsigned long data)
 	event = icsk->icsk_pending;
 	icsk->icsk_pending = 0;
 
-	switch (event) {
+	switch (event)
+	{
 	case ICSK_TIME_RETRANS:
 		tcp_retransmit_timer(sk);
 		break;

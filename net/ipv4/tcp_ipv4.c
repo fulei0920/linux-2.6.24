@@ -1654,15 +1654,13 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	th = tcp_hdr(skb);
 	iph = ip_hdr(skb);
 	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
-	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
-				    skb->len - th->doff * 4);
+	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin + skb->len - th->doff * 4);
 	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
 	TCP_SKB_CB(skb)->when	 = 0;
 	TCP_SKB_CB(skb)->flags	 = iph->tos;
 	TCP_SKB_CB(skb)->sacked	 = 0;
 
-	sk = __inet_lookup(&tcp_hashinfo, iph->saddr, th->source,
-			   iph->daddr, th->dest, inet_iif(skb));
+	sk = __inet_lookup(&tcp_hashinfo, iph->saddr, th->source, iph->daddr, th->dest, inet_iif(skb));
 	if (!sk)
 		goto no_tcp_socket;
 
@@ -1672,8 +1670,8 @@ process:
 
 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
 		goto discard_and_relse;
+	
 	nf_reset(skb);
-
 	if (sk_filter(sk, skb))
 		goto discard_and_relse;
 
@@ -1681,7 +1679,8 @@ process:
 
 	bh_lock_sock_nested(sk);
 	ret = 0;
-	if (!sock_owned_by_user(sk)) {
+	if (!sock_owned_by_user(sk))
+	{
 #ifdef CONFIG_NET_DMA
 		struct tcp_sock *tp = tcp_sk(sk);
 		if (!tp->ucopy.dma_chan && tp->ucopy.pinned_list)
@@ -1694,8 +1693,12 @@ process:
 			if (!tcp_prequeue(sk, skb))
 			ret = tcp_v4_do_rcv(sk, skb);
 		}
-	} else
+	} 
+	else
+	{
 		sk_add_backlog(sk, skb);
+	}
+		
 	bh_unlock_sock(sk);
 
 	sock_put(sk);
@@ -1706,10 +1709,13 @@ no_tcp_socket:
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
 
-	if (skb->len < (th->doff << 2) || tcp_checksum_complete(skb)) {
+	if (skb->len < (th->doff << 2) || tcp_checksum_complete(skb)) 
+	{
 bad_packet:
 		TCP_INC_STATS_BH(TCP_MIB_INERRS);
-	} else {
+	}
+	else
+	{
 		tcp_v4_send_reset(NULL, skb);
 	}
 
@@ -1723,18 +1729,22 @@ discard_and_relse:
 	goto discard_it;
 
 do_time_wait:
-	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
+	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) 
+	{
 		inet_twsk_put(inet_twsk(sk));
 		goto discard_it;
 	}
 
-	if (skb->len < (th->doff << 2) || tcp_checksum_complete(skb)) {
+	if (skb->len < (th->doff << 2) || tcp_checksum_complete(skb)) 
+	{
 		TCP_INC_STATS_BH(TCP_MIB_INERRS);
 		inet_twsk_put(inet_twsk(sk));
 		goto discard_it;
 	}
-	switch (tcp_timewait_state_process(inet_twsk(sk), skb, th)) {
-	case TCP_TW_SYN: {
+	switch (tcp_timewait_state_process(inet_twsk(sk), skb, th))
+	{
+	case TCP_TW_SYN:
+	{
 		struct sock *sk2 = inet_lookup_listener(&tcp_hashinfo,
 							iph->daddr, th->dest,
 							inet_iif(skb));
@@ -2309,13 +2319,18 @@ static void get_tcp4_sock(struct sock *sk, char *tmpbuf, int i)
 	__u16 destp = ntohs(inet->dport);
 	__u16 srcp = ntohs(inet->sport);
 
-	if (icsk->icsk_pending == ICSK_TIME_RETRANS) {
+	if (icsk->icsk_pending == ICSK_TIME_RETRANS) 
+	{
 		timer_active	= 1;
 		timer_expires	= icsk->icsk_timeout;
-	} else if (icsk->icsk_pending == ICSK_TIME_PROBE0) {
+	} 
+	else if (icsk->icsk_pending == ICSK_TIME_PROBE0) 
+	{
 		timer_active	= 4;
 		timer_expires	= icsk->icsk_timeout;
-	} else if (timer_pending(&sk->sk_timer)) {
+	}
+	else if (timer_pending(&sk->sk_timer))
+	{
 		timer_active	= 2;
 		timer_expires	= sk->sk_timer.expires;
 	} else {

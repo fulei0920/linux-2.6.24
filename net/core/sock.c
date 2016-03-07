@@ -1540,8 +1540,7 @@ void sk_send_sigurg(struct sock *sk)
 			sk_wake_async(sk, 3, POLL_PRI);
 }
 
-void sk_reset_timer(struct sock *sk, struct timer_list* timer,
-		    unsigned long expires)
+void sk_reset_timer(struct sock *sk, struct timer_list* timer, unsigned long expires)
 {
 	if (!mod_timer(timer, expires))
 		sock_hold(sk);

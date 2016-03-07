@@ -288,8 +288,7 @@ static void dccp_init_write_xmit_timer(struct sock *sk)
 void dccp_init_xmit_timers(struct sock *sk)
 {
 	dccp_init_write_xmit_timer(sk);
-	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer,
-				  &dccp_keepalive_timer);
+	inet_csk_init_xmit_timers(sk, &dccp_write_timer, &dccp_delack_timer, &dccp_keepalive_timer);
 }
 
 static ktime_t dccp_timestamp_seed;

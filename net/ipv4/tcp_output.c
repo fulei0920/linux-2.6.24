@@ -61,16 +61,16 @@ int sysctl_tcp_base_mss __read_mostly = 512;
 /* By default, RFC2861 behavior.  */
 int sysctl_tcp_slow_start_after_idle __read_mostly = 1;
 
-static inline void tcp_packets_out_inc(struct sock *sk,
-				       const struct sk_buff *skb)
+static inline void tcp_packets_out_inc(struct sock *sk, const struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	int orig = tp->packets_out;
 
 	tp->packets_out += tcp_skb_pcount(skb);
+	//只有当orig为0时才会重启定时器,而orig则是发送未确认的段的个数,也就是说如果发送了很多段,
+	//如果前面的段没有确认,那么后面发送的时候不会重启这个定时器. 
 	if (!orig)
-		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-					  inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
+		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 }
 
 static void update_send_head(struct sock *sk, struct sk_buff *skb)
@@ -1434,13 +1434,17 @@ static int tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle)
 	sent_pkts = 0;
 
 	/* Do MTU probing. */
-	if ((result = tcp_mtu_probe(sk)) == 0) {
+	if ((result = tcp_mtu_probe(sk)) == 0) 
+	{
 		return 0;
-	} else if (result > 0) {
+	}
+	else if (result > 0)
+	{
 		sent_pkts = 1;
 	}
 
-	while ((skb = tcp_send_head(sk))) {
+	while ((skb = tcp_send_head(sk))) 
+	{
 		unsigned int limit;
 
 		tso_segs = tcp_init_tso_segs(sk, skb, mss_now);
@@ -1453,18 +1457,20 @@ static int tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle)
 		if (unlikely(!tcp_snd_wnd_test(tp, skb, mss_now)))
 			break;
 
-		if (tso_segs == 1) {
-			if (unlikely(!tcp_nagle_test(tp, skb, mss_now,
-						     (tcp_skb_is_last(sk, skb) ?
-						      nonagle : TCP_NAGLE_PUSH))))
+		if (tso_segs == 1) 
+		{
+			if (unlikely(!tcp_nagle_test(tp, skb, mss_now, (tcp_skb_is_last(sk, skb) ? nonagle : TCP_NAGLE_PUSH))))
 				break;
-		} else {
+		} 
+		else 
+		{
 			if (tcp_tso_should_defer(sk, skb))
 				break;
 		}
 
 		limit = mss_now;
-		if (tso_segs > 1) {
+		if (tso_segs > 1)
+		{
 			limit = tcp_window_allows(tp, skb,
 						  mss_now, cwnd_quota);
 
@@ -1494,7 +1500,8 @@ static int tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle)
 		sent_pkts++;
 	}
 
-	if (likely(sent_pkts)) {
+	if (likely(sent_pkts)) 
+	{
 		tcp_cwnd_validate(sk);
 		return 0;
 	}
@@ -1505,12 +1512,12 @@ static int tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle)
  * TCP_CORK or attempt at coalescing tiny packets.
  * The socket must be locked by the caller.
  */
-void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
-			       int nonagle)
+void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss, int nonagle)
 {
 	struct sk_buff *skb = tcp_send_head(sk);
 
-	if (skb) {
+	if (skb) 
+	{
 		if (tcp_write_xmit(sk, cur_mss, nonagle))
 			tcp_check_probe_timer(sk);
 	}
@@ -1969,7 +1976,8 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			if (tcp_packets_in_flight(tp) >= tp->snd_cwnd)
 				return;
 
-			if (sacked & TCPCB_LOST) {
+			if (sacked & TCPCB_LOST) 
+			{
 				if (!(sacked&(TCPCB_SACKED_ACKED|TCPCB_SACKED_RETRANS))) {
 					if (tcp_retransmit_skb(sk, skb)) {
 						tp->retransmit_skb_hint = NULL;
@@ -1981,9 +1989,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 						NET_INC_STATS_BH(LINUX_MIB_TCPSLOWSTARTRETRANS);
 
 					if (skb == tcp_write_queue_head(sk))
-						inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-									  inet_csk(sk)->icsk_rto,
-									  TCP_RTO_MAX);
+						inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 				}
 
 				packet_cnt += tcp_skb_pcount(skb);
@@ -2044,9 +2050,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 		}
 
 		if (skb == tcp_write_queue_head(sk))
-			inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-						  inet_csk(sk)->icsk_rto,
-						  TCP_RTO_MAX);
+			inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 
 		NET_INC_STATS_BH(LINUX_MIB_TCPFORWARDRETRANS);
 	}
@@ -2369,8 +2373,7 @@ int tcp_connect(struct sock *sk)
 	TCP_INC_STATS(TCP_MIB_ACTIVEOPENS);
 
 	/* Timer for repeating the SYN until an answer. */
-	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
-				  inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
+	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 	return 0;
 }
 

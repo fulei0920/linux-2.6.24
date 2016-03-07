@@ -92,7 +92,8 @@ struct inet_bind_hashbucket
 /* This is for listening sockets, thus all sockets which possess wildcards. */
 #define INET_LHTABLE_SIZE	32	/* Yes, really, this is all you need. */
 
-struct inet_hashinfo {
+struct inet_hashinfo 
+{
 	/* This is for sockets with full identity only.  Sockets here will
 	 * always be without wildcards and will have the following invariant:
 	 *
@@ -446,14 +447,11 @@ static inline struct sock *
 					 ntohs(dport), dif);
 }
 
-static inline struct sock *__inet_lookup(struct inet_hashinfo *hashinfo,
-					 const __be32 saddr, const __be16 sport,
-					 const __be32 daddr, const __be16 dport,
-					 const int dif)
+static inline struct sock *__inet_lookup(struct inet_hashinfo *hashinfo, const __be32 saddr, 
+		const __be16 sport, const __be32 daddr, const __be16 dport, const int dif)
 {
 	u16 hnum = ntohs(dport);
-	struct sock *sk = __inet_lookup_established(hashinfo, saddr, sport, daddr,
-						    hnum, dif);
+	struct sock *sk = __inet_lookup_established(hashinfo, saddr, sport, daddr, hnum, dif);
 	return sk ? : __inet_lookup_listener(hashinfo, daddr, hnum, dif);
 }
 

@@ -21,14 +21,15 @@
 #include <asm/byteorder.h>
 #include <linux/socket.h>
 
-struct tcphdr {
-	__be16	source;
-	__be16	dest;
-	__be32	seq;
-	__be32	ack_seq;
+struct tcphdr 
+{
+	__be16	source;			//源端口(Source Port)
+	__be16	dest;			//目的端口(Destination port)
+	__be32	seq;			//序列号(Sequence Number)
+	__be32	ack_seq;		//(Acknowledgment Number)
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u16	res1:4,
-		doff:4,
+		doff:4,		
 		fin:1,
 		syn:1,
 		rst:1,
@@ -38,9 +39,9 @@ struct tcphdr {
 		ece:1,
 		cwr:1;
 #elif defined(__BIG_ENDIAN_BITFIELD)
-	__u16	doff:4,
-		res1:4,
-		cwr:1,
+	__u16	doff:4,			//首部长度(Data Offset)
+		res1:4,				//(Reserved)
+		cwr:1,				
 		ece:1,
 		urg:1,
 		ack:1,
@@ -52,8 +53,8 @@ struct tcphdr {
 #error	"Adjust your <asm/byteorder.h> defines"
 #endif	
 	__be16	window;
-	__sum16	check;
-	__be16	urg_ptr;
+	__sum16	check;			//检验和(Checksum)
+	__be16	urg_ptr;		//紧急指针(Urgent Pointer)
 };
 
 /*
@@ -104,14 +105,19 @@ enum {
 
 enum tcp_ca_state
 {
+	//初始状态，也就是没有检测到任何拥塞的情况.
 	TCP_CA_Open = 0,
 #define TCPF_CA_Open	(1<<TCP_CA_Open)
+	//状态就是当第一次由于收到SACK或者重复的ack而检测到拥塞时，就进入这个状态
 	TCP_CA_Disorder = 1,
 #define TCPF_CA_Disorder (1<<TCP_CA_Disorder)
+	//由于一些拥塞通知事件而导致拥塞窗口减小,然后就会进入这个状态。比如ECN，ICMP，本地设备拥塞
 	TCP_CA_CWR = 2,
 #define TCPF_CA_CWR	(1<<TCP_CA_CWR)
+	// 当CWND减小
 	TCP_CA_Recovery = 3,
 #define TCPF_CA_Recovery (1<<TCP_CA_Recovery)
+	//超时或者SACK被拒绝，此时表示数据包丢失，因此进入这个状态
 	TCP_CA_Loss = 4
 #define TCPF_CA_Loss	(1<<TCP_CA_Loss)
 };
@@ -204,7 +210,8 @@ struct tcp_sack_block {
 	u32	end_seq;
 };
 
-struct tcp_options_received {
+struct tcp_options_received 
+{
 /*	PAWS/RTTM data	*/
 	long	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
 	u32	ts_recent;	/* Time stamp to echo next		*/
@@ -262,13 +269,15 @@ struct tcp_sock
 	u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
  	u32	snd_nxt;	/* Next sequence we send		*/
 
+	//滑动窗口中的发送但未被确认的第一个字节的序列号
  	u32	snd_una;	/* First byte we want an ack for	*/
  	u32	snd_sml;	/* Last byte of the most recently transmitted small packet */
 	u32	rcv_tstamp;	/* timestamp of last received ACK (for keepalives) */
 	u32	lsndtime;	/* timestamp of last sent data packet (for restart window) */
 
 	/* Data for direct copy to user */
-	struct {
+	struct
+	{
 		struct sk_buff_head	prequeue;
 		struct task_struct	*task;
 		struct iovec		*iov;
@@ -363,10 +372,12 @@ struct tcp_sock
 	u32	lost_retrans_low;	/* Sent seq after any rxmit (lowest) */
 
 	u16	advmss;		/* Advertised MSS			*/
+	//前一个snd_ssthresh得大小，也就是说每次改变snd_ssthresh前都要保存老的snd_ssthresh
 	u16	prior_ssthresh; /* ssthresh saved at recovery start	*/
 	u32	lost_out;	/* Lost packets			*/
 	u32	sacked_out;	/* SACK'd packets			*/
 	u32	fackets_out;	/* FACK'd packets			*/
+	//拥塞开始时，snd_nxt的大小
 	u32	high_seq;	/* snd_nxt at onset of congestion	*/
 
 	u32	retrans_stamp;	/* Timestamp of the last retransmit,
