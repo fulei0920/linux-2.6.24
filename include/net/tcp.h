@@ -199,10 +199,14 @@ extern int sysctl_tcp_fin_timeout;
 extern int sysctl_tcp_keepalive_time;
 extern int sysctl_tcp_keepalive_probes;
 extern int sysctl_tcp_keepalive_intvl;
+//表示syn分节的重传次数。 
 extern int sysctl_tcp_syn_retries;
 extern int sysctl_tcp_synack_retries;
-extern int sysctl_tcp_retries1;
-extern int sysctl_tcp_retries2;
+//表示重传的最大次数，当超过了这个值，我们就需要检测路由表了
+extern int sysctl_tcp_retries1;	
+//表示重传的最大次数，只不过这个值一般要比sysctl_tcp_retries1的值大。当重试次数超过这个值，我们就必须放弃重传了。 
+extern int sysctl_tcp_retries2;		
+//表示孤立的socket(也就是已经从进程上下文中删除了，可是还有一些清理工作没有完成)重传的最大次数。 
 extern int sysctl_tcp_orphan_retries;
 extern int sysctl_tcp_syncookies;
 extern int sysctl_tcp_retrans_collapse;
@@ -438,8 +442,7 @@ extern __u32 cookie_v4_init_sequence(struct sock *sk, struct sk_buff *skb,
 
 /* tcp_output.c */
 
-extern void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
-				      int nonagle);
+extern void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss, int nonagle);
 extern int tcp_may_send_now(struct sock *sk);
 extern int tcp_retransmit_skb(struct sock *, struct sk_buff *);
 extern void tcp_xmit_retransmit_queue(struct sock *);
@@ -542,13 +545,16 @@ extern u32	__tcp_select_window(struct sock *sk);
  * 40 bytes on 64-bit machines, if this grows please adjust
  * skbuff.h:skbuff->cb[xxx] size appropriately.
  */
-struct tcp_skb_cb {
-	union {
+struct tcp_skb_cb 
+{
+	union
+	{
 		struct inet_skb_parm	h4;
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 		struct inet6_skb_parm	h6;
 #endif
-	} header;	/* For incoming frames		*/
+	} header;	
+	/* For incoming frames		*/
 	__u32		seq;		/* Starting sequence number	*/ //起始序列编号
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
 	__u32		when;		/* used to compute rtt's	*/
@@ -615,7 +621,8 @@ static inline void tcp_dec_pcount_approx(__u32 *count,
 }
 
 /* Events passed to congestion control interface */
-enum tcp_ca_event {
+enum tcp_ca_event
+{
 	CA_EVENT_TX_START,	/* first transmit when no packets in flight */
 	CA_EVENT_CWND_RESTART,	/* congestion window restart */
 	CA_EVENT_COMPLETE_CWR,	/* end of congestion recovery */
@@ -635,7 +642,8 @@ enum tcp_ca_event {
 #define TCP_CONG_NON_RESTRICTED 0x1
 #define TCP_CONG_RTT_STAMP	0x2
 
-struct tcp_congestion_ops {
+struct tcp_congestion_ops 
+{
 	struct list_head	list;
 	unsigned long flags;
 
@@ -814,8 +822,7 @@ static inline void tcp_check_probe_timer(struct sock *sk)
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 
 	if (!tp->packets_out && !icsk->icsk_pending)
-		inet_csk_reset_xmit_timer(sk, ICSK_TIME_PROBE0,
-					  icsk->icsk_rto, TCP_RTO_MAX);
+		inet_csk_reset_xmit_timer(sk, ICSK_TIME_PROBE0, icsk->icsk_rto, TCP_RTO_MAX);
 }
 
 static inline void tcp_push_pending_frames(struct sock *sk)
@@ -883,10 +890,12 @@ static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (!sysctl_tcp_low_latency && tp->ucopy.task) {
+	if (!sysctl_tcp_low_latency && tp->ucopy.task)
+	{
 		__skb_queue_tail(&tp->ucopy.prequeue, skb);
 		tp->ucopy.memory += skb->truesize;
-		if (tp->ucopy.memory > sk->sk_rcvbuf) {
+		if (tp->ucopy.memory > sk->sk_rcvbuf) 
+		{
 			struct sk_buff *skb1;
 
 			BUG_ON(sock_owned_by_user(sk));

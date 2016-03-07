@@ -486,8 +486,7 @@ static inline void tcp_mark_urg(struct tcp_sock *tp, int flags,
 	}
 }
 
-static inline void tcp_push(struct sock *sk, int flags, int mss_now,
-			    int nonagle)
+static inline void tcp_push(struct sock *sk, int flags, int mss_now, int nonagle)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 

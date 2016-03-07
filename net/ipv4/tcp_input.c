@@ -198,7 +198,7 @@ static inline int tcp_in_quickack_mode(const struct sock *sk)
 
 static inline void TCP_ECN_queue_cwr(struct tcp_sock *tp)
 {
-	if (tp->ecn_flags&TCP_ECN_OK)
+	if (tp->ecn_flags & TCP_ECN_OK)
 		tp->ecn_flags |= TCP_ECN_QUEUE_CWR;
 }
 
@@ -1600,7 +1600,8 @@ int tcp_use_frto(struct sock *sk)
 
 	skb = tcp_write_queue_head(sk);
 	skb = tcp_write_queue_next(sk, skb);	/* Skips head */
-	tcp_for_write_queue_from(skb, sk) {
+	tcp_for_write_queue_from(skb, sk)
+	{
 		if (skb == tcp_send_head(sk))
 			break;
 		if (TCP_SKB_CB(skb)->sacked&TCPCB_RETRANS)
@@ -1776,6 +1777,7 @@ void tcp_clear_retrans(struct tcp_sock *tp)
  * and reset tags completely, otherwise preserve SACKs. If receiver
  * dropped its ofo queue, we will know this due to reneging detection.
  */
+//进入Loss状态，是否清除SACK标志取决于how，how不为0则清除 
 void tcp_enter_loss(struct sock *sk, int how)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
@@ -1784,8 +1786,10 @@ void tcp_enter_loss(struct sock *sk, int how)
 
 	/* Reduce ssthresh if it has not yet been made inside this window. */
 	if (icsk->icsk_ca_state <= TCP_CA_Disorder || tp->snd_una == tp->high_seq ||
-	    (icsk->icsk_ca_state == TCP_CA_Loss && !icsk->icsk_retransmits)) {
+	    (icsk->icsk_ca_state == TCP_CA_Loss && !icsk->icsk_retransmits)) 
+	{
 		tp->prior_ssthresh = tcp_current_ssthresh(sk);
+		///减小snd_ssthresh 
 		tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
 		tcp_ca_event(sk, CA_EVENT_LOSS);
 	}
@@ -1794,30 +1798,39 @@ void tcp_enter_loss(struct sock *sk, int how)
 	tp->snd_cwnd_stamp = tcp_time_stamp;
 
 	tp->bytes_acked = 0;
+	///清空所有相关的计数器
 	tcp_clear_retrans_partial(tp);
 
 	if (tcp_is_reno(tp))
 		tcp_reset_reno_sack(tp);
 
-	if (!how) {
+	if (!how)
+	{
 		/* Push undo marker, if it was plain RTO and nothing
 		 * was retransmitted. */
 		tp->undo_marker = tp->snd_una;
 		tcp_clear_retrans_hints_partial(tp);
-	} else {
+	} 
+	else 
+	{
 		tp->sacked_out = 0;
 		tp->fackets_out = 0;
 		tcp_clear_all_retrans_hints(tp);
 	}
 
-	tcp_for_write_queue(skb, sk) {
+	tcp_for_write_queue(skb, sk)
+	{
 		if (skb == tcp_send_head(sk))
 			break;
 
 		if (TCP_SKB_CB(skb)->sacked&TCPCB_RETRANS)
 			tp->undo_marker = 0;
+		
 		TCP_SKB_CB(skb)->sacked &= (~TCPCB_TAGBITS)|TCPCB_SACKED_ACKED;
-		if (!(TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_ACKED) || how) {
+		
+		//如果how为1,则说明不管sack段，此时标记所有的段为丢失
+		if (!(TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_ACKED) || how)
+		{
 			TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_ACKED;
 			TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
 			tp->lost_out += tcp_skb_pcount(skb);
@@ -1825,8 +1838,7 @@ void tcp_enter_loss(struct sock *sk, int how)
 	}
 	tcp_verify_left_out(tp);
 
-	tp->reordering = min_t(unsigned int, tp->reordering,
-					     sysctl_tcp_reordering);
+	tp->reordering = min_t(unsigned int, tp->reordering, sysctl_tcp_reordering);
 	tcp_set_ca_state(sk, TCP_CA_Loss);
 	tp->high_seq = tp->snd_nxt;
 	TCP_ECN_queue_cwr(tp);
@@ -1844,8 +1856,8 @@ static int tcp_check_sack_reneging(struct sock *sk)
 	 * receiver _host_ is heavily congested (or buggy).
 	 * Do processing similar to RTO timeout.
 	 */
-	if ((skb = tcp_write_queue_head(sk)) != NULL &&
-	    (TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_ACKED)) {
+	if ((skb = tcp_write_queue_head(sk)) != NULL && (TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_ACKED))
+	{
 		struct inet_connection_sock *icsk = inet_csk(sk);
 		NET_INC_STATS_BH(LINUX_MIB_TCPSACKRENEGING);
 
@@ -1970,6 +1982,7 @@ static inline int tcp_head_timedout(struct sock *sk)
  * Main question: may we further continue forward transmission
  * with the same cwnd?
  */
+//这个函数主要是用来判断是否需要进入recover状态
 static int tcp_time_to_recover(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2418,10 +2431,13 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 
 	/* E. Check state exit conditions. State can be terminated
 	 *    when high_seq is ACKed. */
-	if (icsk->icsk_ca_state == TCP_CA_Open) {
+	if (icsk->icsk_ca_state == TCP_CA_Open) 
+	{
 		BUG_TRAP(tp->retrans_out == 0);
 		tp->retrans_stamp = 0;
-	} else if (!before(tp->snd_una, tp->high_seq)) {
+	} 
+	else if (!before(tp->snd_una, tp->high_seq))
+	{
 		switch (icsk->icsk_ca_state) {
 		case TCP_CA_Loss:
 			icsk->icsk_retransmits = 0;
@@ -2595,8 +2611,7 @@ static inline void tcp_ack_update_rtt(struct sock *sk, const int flag,
 		tcp_ack_no_tstamp(sk, seq_rtt, flag);
 }
 
-static void tcp_cong_avoid(struct sock *sk, u32 ack,
-			   u32 in_flight, int good)
+static void tcp_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int good)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	icsk->icsk_ca_ops->cong_avoid(sk, ack, in_flight, good);
@@ -2610,9 +2625,13 @@ static void tcp_rearm_rto(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (!tp->packets_out) {
+	///为0说明所有的传输的段都已经acked。此时remove定时器。否则重启定时器。
+	if (!tp->packets_out)
+	{
 		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
-	} else {
+	}
+	else
+	{
 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 	}
 }
@@ -2642,8 +2661,7 @@ static u32 tcp_tso_acked(struct sock *sk, struct sk_buff *skb)
  * is before the ack sequence we can discard it as it's confirmed to have
  * arrived at the other end.
  */
-static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p,
-			       int prior_fackets)
+static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_fackets)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	const struct inet_connection_sock *icsk = inet_csk(sk);
@@ -2658,7 +2676,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p,
 	s32 ca_seq_rtt = -1;
 	ktime_t last_ackt = net_invalid_timestamp();
 
-	while ((skb = tcp_write_queue_head(sk)) && skb != tcp_send_head(sk)) {
+	while ((skb = tcp_write_queue_head(sk)) && skb != tcp_send_head(sk))
+	{
 		struct tcp_skb_cb *scb = TCP_SKB_CB(skb);
 		u32 end_seq;
 		u32 packets_acked;
@@ -2733,9 +2752,12 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p,
 		 * connection startup slow start one packet too
 		 * quickly.  This is severely frowned upon behavior.
 		 */
-		if (!(scb->flags & TCPCB_FLAG_SYN)) {
+		if (!(scb->flags & TCPCB_FLAG_SYN)) 
+		{
 			flag |= FLAG_DATA_ACKED;
-		} else {
+		} 
+		else
+		{
 			flag |= FLAG_SYN_ACKED;
 			tp->retrans_stamp = 0;
 		}
@@ -2748,17 +2770,20 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p,
 		tcp_clear_all_retrans_hints(tp);
 	}
 
-	if (flag & FLAG_ACKED) {
+	if (flag & FLAG_ACKED)
+	{
 		u32 pkts_acked = prior_packets - tp->packets_out;
-		const struct tcp_congestion_ops *ca_ops
-			= inet_csk(sk)->icsk_ca_ops;
+		const struct tcp_congestion_ops *ca_ops = inet_csk(sk)->icsk_ca_ops;
 
 		tcp_ack_update_rtt(sk, flag, seq_rtt);
 		tcp_rearm_rto(sk);
 
-		if (tcp_is_reno(tp)) {
+		if (tcp_is_reno(tp)) 
+		{
 			tcp_remove_reno_sacks(sk, pkts_acked);
-		} else {
+		} 
+		else 
+		{
 			/* Non-retransmitted hole got filled? That's reordering */
 			if (reord < prior_fackets)
 				tcp_update_reordering(sk, tp->fackets_out - reord, 0);
@@ -3121,13 +3146,15 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 	if (before(tp->frto_highmark, tp->snd_una))
 		tp->frto_highmark = 0;
 
-	if (tcp_ack_is_dubious(sk, flag)) {
+	if (tcp_ack_is_dubious(sk, flag)) 
+	{
 		/* Advance CWND, if state allows this. */
-		if ((flag & FLAG_DATA_ACKED) && !frto_cwnd &&
-		    tcp_may_raise_cwnd(sk, flag))
+		if ((flag & FLAG_DATA_ACKED) && !frto_cwnd && tcp_may_raise_cwnd(sk, flag))
 			tcp_cong_avoid(sk, ack, prior_in_flight, 0);
 		tcp_fastretrans_alert(sk, prior_packets - tp->packets_out, flag);
-	} else {
+	}
+	else 
+	{
 		if ((flag & FLAG_DATA_ACKED) && !frto_cwnd)
 			tcp_cong_avoid(sk, ack, prior_in_flight, 1);
 	}
@@ -4447,8 +4474,7 @@ out:
  *	the rest is checked inline. Fast processing is turned on in
  *	tcp_data_queue when everything is OK.
  */
-int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
-			struct tcphdr *th, unsigned len)
+int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th, unsigned len)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 

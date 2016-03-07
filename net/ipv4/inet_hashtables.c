@@ -161,9 +161,7 @@ static struct sock *inet_lookup_listener_slow(const struct hlist_head *head,
 }
 
 /* Optimize the common listener case. */
-struct sock *__inet_lookup_listener(struct inet_hashinfo *hashinfo,
-				    const __be32 daddr, const unsigned short hnum,
-				    const int dif)
+struct sock *__inet_lookup_listener(struct inet_hashinfo *hashinfo, const __be32 daddr, const unsigned short hnum, const int dif)
 {
 	struct sock *sk = NULL;
 	const struct hlist_head *head;

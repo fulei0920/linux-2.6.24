@@ -77,7 +77,8 @@
  * between user contexts and software interrupt processing, whereas the
  * mini-semaphore synchronizes multiple users amongst themselves.
  */
-typedef struct {
+typedef struct 
+{
 	spinlock_t		slock;
 	int			owned;
 	wait_queue_head_t	wq;
@@ -949,9 +950,9 @@ static inline int sk_filter(struct sock *sk, struct sk_buff *skb)
 	
 	rcu_read_lock_bh();
 	filter = rcu_dereference(sk->sk_filter);
-	if (filter) {
-		unsigned int pkt_len = sk_run_filter(skb, filter->insns,
-				filter->len);
+	if (filter) 
+	{
+		unsigned int pkt_len = sk_run_filter(skb, filter->insns, filter->len);
 		err = pkt_len ? pskb_trim(skb, pkt_len) : -EPERM;
 	}
  	rcu_read_unlock_bh();

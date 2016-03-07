@@ -81,12 +81,13 @@ struct inet_connection_sock_af_ops {
  * @icsk_ack:		   Delayed ACK control data
  * @icsk_mtup;		   MTU probing control data
  */
-struct inet_connection_sock {
+struct inet_connection_sock
+{
 	/* inet_sock has to be the first member! */
 	struct inet_sock	  icsk_inet;
 	struct request_sock_queue icsk_accept_queue;
 	struct inet_bind_bucket	  *icsk_bind_hash;
-	unsigned long		  icsk_timeout;
+	unsigned long		  icsk_timeout;			///指定当前icsk_retransmit_timer定时器的超时时刻
  	struct timer_list	  icsk_retransmit_timer;
  	struct timer_list	  icsk_delack_timer;
 	__u32			  icsk_rto;
@@ -94,14 +95,18 @@ struct inet_connection_sock {
 	const struct tcp_congestion_ops *icsk_ca_ops;
 	const struct inet_connection_sock_af_ops *icsk_af_ops;
 	unsigned int		  (*icsk_sync_mss)(struct sock *sk, u32 pmtu);
+	//表示拥塞控制的状态
 	__u8			  icsk_ca_state;
-	__u8			  icsk_retransmits;
-	__u8			  icsk_pending;
+	//表明已经重传了的次数
+	__u8			  icsk_retransmits;	
+	///指定当前icsk_retransmit_timer定时器类型是ICSK_TIME_RETRANS还是ICSK_TIME_PROBE0
+	__u8			  icsk_pending;		
 	__u8			  icsk_backoff;
 	__u8			  icsk_syn_retries;
 	__u8			  icsk_probes_out;
 	__u16			  icsk_ext_hdr_len;
-	struct {
+	struct
+	{
 		__u8		  pending;	 /* ACK is pending			   */
 		__u8		  quick;	 /* Scheduled number of quick acks	   */
 		__u8		  pingpong;	 /* The session is interactive		   */
@@ -112,7 +117,8 @@ struct inet_connection_sock {
 		__u16		  last_seg_size; /* Size of last incoming segment	   */
 		__u16		  rcv_mss;	 /* MSS used for delayed ACK decisions	   */ 
 	} icsk_ack;
-	struct {
+	struct 
+	{
 		int		  enabled;
 
 		/* Range of MTUs to search */
@@ -152,10 +158,7 @@ enum inet_csk_ack_state_t {
 	ICSK_ACK_PUSHED2 = 8
 };
 
-extern void inet_csk_init_xmit_timers(struct sock *sk,
-				      void (*retransmit_handler)(unsigned long),
-				      void (*delack_handler)(unsigned long),
-				      void (*keepalive_handler)(unsigned long));
+extern void inet_csk_init_xmit_timers(struct sock *sk, void (*retransmit_handler)(unsigned long), void (*delack_handler)(unsigned long), void (*keepalive_handler)(unsigned long));
 extern void inet_csk_clear_xmit_timers(struct sock *sk);
 
 static inline void inet_csk_schedule_ack(struct sock *sk)
@@ -184,19 +187,23 @@ static inline void inet_csk_clear_xmit_timer(struct sock *sk, const int what)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	
-	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0) {
+	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0) 
+	{
 		icsk->icsk_pending = 0;
 #ifdef INET_CSK_CLEAR_TIMERS
 		sk_stop_timer(sk, &icsk->icsk_retransmit_timer);
 #endif
-	} else if (what == ICSK_TIME_DACK) {
+	} 
+	else if (what == ICSK_TIME_DACK) 
+	{
 		icsk->icsk_ack.blocked = icsk->icsk_ack.pending = 0;
 #ifdef INET_CSK_CLEAR_TIMERS
 		sk_stop_timer(sk, &icsk->icsk_delack_timer);
 #endif
 	}
 #ifdef INET_CSK_DEBUG
-	else {
+	else 
+	{
 		pr_debug("%s", inet_csk_timer_bug_msg);
 	}
 #endif
@@ -205,31 +212,33 @@ static inline void inet_csk_clear_xmit_timer(struct sock *sk, const int what)
 /*
  *	Reset the retransmission timer
  */
-static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what,
-					     unsigned long when,
-					     const unsigned long max_when)
+static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what, unsigned long when, const unsigned long max_when)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
-	if (when > max_when) {
+	if (when > max_when) 
+	{
 #ifdef INET_CSK_DEBUG
-		pr_debug("reset_xmit_timer: sk=%p %d when=0x%lx, caller=%p\n",
-			 sk, what, when, current_text_addr());
+		pr_debug("reset_xmit_timer: sk=%p %d when=0x%lx, caller=%p\n", sk, what, when, current_text_addr());
 #endif
 		when = max_when;
 	}
 
-	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0) {
+	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0)
+	{
 		icsk->icsk_pending = what;
 		icsk->icsk_timeout = jiffies + when;
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, icsk->icsk_timeout);
-	} else if (what == ICSK_TIME_DACK) {
+	} 
+	else if (what == ICSK_TIME_DACK)
+	{
 		icsk->icsk_ack.pending |= ICSK_ACK_TIMER;
 		icsk->icsk_ack.timeout = jiffies + when;
 		sk_reset_timer(sk, &icsk->icsk_delack_timer, icsk->icsk_ack.timeout);
 	}
 #ifdef INET_CSK_DEBUG
-	else {
+	else
+	{
 		pr_debug("%s", inet_csk_timer_bug_msg);
 	}
 #endif

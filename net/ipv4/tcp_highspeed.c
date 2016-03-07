@@ -93,7 +93,8 @@ static const struct hstcp_aimd_val {
 
 #define HSTCP_AIMD_MAX	ARRAY_SIZE(hstcp_aimd_vals)
 
-struct hstcp {
+struct hstcp 
+{
 	u32	ai;
 };
 
@@ -159,7 +160,8 @@ static u32 hstcp_ssthresh(struct sock *sk)
 }
 
 
-static struct tcp_congestion_ops tcp_highspeed = {
+static struct tcp_congestion_ops tcp_highspeed = 
+{
 	.init		= hstcp_init,
 	.ssthresh	= hstcp_ssthresh,
 	.cong_avoid	= hstcp_cong_avoid,

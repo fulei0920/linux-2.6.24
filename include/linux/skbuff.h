@@ -264,7 +264,8 @@ typedef unsigned char *sk_buff_data_t;
 //通用成员变量
 //标志性变量
 //与特性相关的成员变量
-struct sk_buff {
+struct sk_buff 
+{
 	/* These two members must be first. */
 	struct sk_buff		*next;
 	struct sk_buff		*prev;
