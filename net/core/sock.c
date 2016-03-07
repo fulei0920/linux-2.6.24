@@ -158,7 +158,8 @@ static const char *af_family_key_strings[AF_MAX+1] = {
   "sk_lock-AF_TIPC"  , "sk_lock-AF_BLUETOOTH", "sk_lock-IUCV"        ,
   "sk_lock-AF_RXRPC" , "sk_lock-AF_MAX"
 };
-static const char *af_family_slock_key_strings[AF_MAX+1] = {
+static const char *af_family_slock_key_strings[AF_MAX+1] = 
+{
   "slock-AF_UNSPEC", "slock-AF_UNIX"     , "slock-AF_INET"     ,
   "slock-AF_AX25"  , "slock-AF_IPX"      , "slock-AF_APPLETALK",
   "slock-AF_NETROM", "slock-AF_BRIDGE"   , "slock-AF_ATMPVC"   ,
@@ -172,7 +173,8 @@ static const char *af_family_slock_key_strings[AF_MAX+1] = {
   "slock-AF_TIPC"  , "slock-AF_BLUETOOTH", "slock-AF_IUCV"     ,
   "slock-AF_RXRPC" , "slock-AF_MAX"
 };
-static const char *af_family_clock_key_strings[AF_MAX+1] = {
+static const char *af_family_clock_key_strings[AF_MAX+1] = 
+{
   "clock-AF_UNSPEC", "clock-AF_UNIX"     , "clock-AF_INET"     ,
   "clock-AF_AX25"  , "clock-AF_IPX"      , "clock-AF_APPLETALK",
   "clock-AF_NETROM", "clock-AF_BRIDGE"   , "clock-AF_ATMPVC"   ,
@@ -850,11 +852,8 @@ lenout:
  */
 static inline void sock_lock_init(struct sock *sk)
 {
-	sock_lock_init_class_and_name(sk,
-			af_family_slock_key_strings[sk->sk_family],
-			af_family_slock_keys + sk->sk_family,
-			af_family_key_strings[sk->sk_family],
-			af_family_keys + sk->sk_family);
+	sock_lock_init_class_and_name(sk, af_family_slock_key_strings[sk->sk_family], af_family_slock_keys + sk->sk_family,
+			af_family_key_strings[sk->sk_family], af_family_keys + sk->sk_family);
 }
 
 static void sock_copy(struct sock *nsk, const struct sock *osk)
@@ -1316,12 +1315,16 @@ static void __lock_sock(struct sock *sk)
 {
 	DEFINE_WAIT(wait);
 
-	for (;;) {
-		prepare_to_wait_exclusive(&sk->sk_lock.wq, &wait,
-					TASK_UNINTERRUPTIBLE);
+	for (;;)
+	{
+		///加入等待队列,可以看到加入的等待队列是sl_lock.wq
+		prepare_to_wait_exclusive(&sk->sk_lock.wq, &wait, TASK_UNINTERRUPTIBLE);
+		///解锁
 		spin_unlock_bh(&sk->sk_lock.slock);
+		///让出cpu，进入休眠
 		schedule();
 		spin_lock_bh(&sk->sk_lock.slock);
+		///如果轮到我们处理这个sock，则跳出循环
 		if (!sock_owned_by_user(sk))
 			break;
 	}
@@ -1332,14 +1335,17 @@ static void __release_sock(struct sock *sk)
 {
 	struct sk_buff *skb = sk->sk_backlog.head;
 
-	do {
+	do 
+	{
 		sk->sk_backlog.head = sk->sk_backlog.tail = NULL;
 		bh_unlock_sock(sk);
 
-		do {
+		do
+		{
 			struct sk_buff *next = skb->next;
 
 			skb->next = NULL;
+			//最终会调tcp_v4_do_rcv.而在tcp_v4_do_rcv中，会把数据复制到receive_queue队列中
 			sk->sk_backlog_rcv(sk, skb);
 
 			/*
@@ -1351,10 +1357,12 @@ static void __release_sock(struct sock *sk)
 			cond_resched_softirq();
 
 			skb = next;
-		} while (skb != NULL);
+		} 
+		while (skb != NULL);
 
 		bh_lock_sock(sk);
-	} while ((skb = sk->sk_backlog.head) != NULL);
+	}
+	while ((skb = sk->sk_backlog.head) != NULL);
 }
 
 /**
@@ -1371,9 +1379,11 @@ int sk_wait_data(struct sock *sk, long *timeo)
 {
 	int rc;
 	DEFINE_WAIT(wait);
-
+	
+	///加入sk_sleep的等待队列
 	prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
 	set_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
+	///处理事件
 	rc = sk_wait_event(sk, timeo, !skb_queue_empty(&sk->sk_receive_queue));
 	clear_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
 	finish_wait(sk->sk_sleep, &wait);
@@ -1619,9 +1629,12 @@ void fastcall lock_sock_nested(struct sock *sk, int subclass)
 {
 	might_sleep();
 	spin_lock_bh(&sk->sk_lock.slock);
+	///如果owned为1,也就是有其他进程在使用这个sock。此时调用__lock_sock(这个函数用来休眠进程，进入等待队列)。 
 	if (sk->sk_lock.owned)
 		__lock_sock(sk);
+	///当sock可以使用了，则设置owned为1,标记被当前进程所使用。
 	sk->sk_lock.owned = 1;
+	///解锁
 	spin_unlock(&sk->sk_lock.slock);
 	/*
 	 * The sk_lock has mutex_lock() semantics here:
@@ -1642,7 +1655,9 @@ void fastcall release_sock(struct sock *sk)
 	spin_lock_bh(&sk->sk_lock.slock);
 	if (sk->sk_backlog.tail)
 		__release_sock(sk);
+	///处理完毕则给owened赋值为0.释放对这个sock的控制
 	sk->sk_lock.owned = 0;
+	///唤醒wq上的所有元素
 	if (waitqueue_active(&sk->sk_lock.wq))
 		wake_up(&sk->sk_lock.wq);
 	spin_unlock_bh(&sk->sk_lock.slock);

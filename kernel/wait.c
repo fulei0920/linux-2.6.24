@@ -119,7 +119,8 @@ void fastcall finish_wait(wait_queue_head_t *q, wait_queue_t *wait)
 	 *    have _one_ other CPU that looks at or modifies
 	 *    the list).
 	 */
-	if (!list_empty_careful(&wait->task_list)) {
+	if (!list_empty_careful(&wait->task_list)) 
+	{
 		spin_lock_irqsave(&q->lock, flags);
 		list_del_init(&wait->task_list);
 		spin_unlock_irqrestore(&q->lock, flags);

@@ -80,7 +80,9 @@
 typedef struct 
 {
 	spinlock_t		slock;
+	///如果有用户进程在使用这个sock 则owned为1,否则为0  
 	int			owned;
+	///等待队列，也就是当sock被锁住后，等待使用这个sock的对象的队列
 	wait_queue_head_t	wq;
 	/*
 	 * We express the mutex-alike socket_lock semantics
@@ -202,18 +204,19 @@ struct sock
 #define sk_prot			__sk_common.skc_prot
 #define sk_net			__sk_common.skc_net
 	unsigned char		sk_shutdown : 2,
-				sk_no_check : 2,			// checksum on rcv/xmit/none? 
-				sk_userlocks : 4;
+						sk_no_check : 2,			// checksum on rcv/xmit/none? 
+						sk_userlocks : 4;
 	unsigned char		sk_protocol;
 	unsigned short		sk_type;
-	int			sk_rcvbuf;					//size of receive buffer in bytes
+	int					sk_rcvbuf;					//size of receive buffer in bytes
 	socket_lock_t		sk_lock;
 	/*
 	 * The backlog queue is special, it is always used with
 	 * the per-socket spinlock held and requires low latency
 	 * access. Therefore we special case it's implementation.
 	 */
-	struct {
+	struct 
+	{
 		struct sk_buff *head;
 		struct sk_buff *tail;
 	} sk_backlog;
@@ -262,8 +265,7 @@ struct sock
 	void			(*sk_data_ready)(struct sock *sk, int bytes);
 	void			(*sk_write_space)(struct sock *sk);
 	void			(*sk_error_report)(struct sock *sk);
-  	int			(*sk_backlog_rcv)(struct sock *sk,
-						  struct sk_buff *skb);  
+  	int				(*sk_backlog_rcv)(struct sock *sk, struct sk_buff *skb);  
 	void                    (*sk_destruct)(struct sock *sk);
 };
 
@@ -478,9 +480,12 @@ static inline void sk_stream_free_skb(struct sock *sk, struct sk_buff *skb)
 /* The per-socket spinlock must be held here. */
 static inline void sk_add_backlog(struct sock *sk, struct sk_buff *skb)
 {
-	if (!sk->sk_backlog.tail) {
+	if (!sk->sk_backlog.tail) 
+	{
 		sk->sk_backlog.head = sk->sk_backlog.tail = skb;
-	} else {
+	} 
+	else 
+	{
 		sk->sk_backlog.tail->next = skb;
 		sk->sk_backlog.tail = skb;
 	}
@@ -810,10 +815,8 @@ do {									\
 	sk->sk_lock.owned = 0;					\
 	init_waitqueue_head(&sk->sk_lock.wq);				\
 	spin_lock_init(&(sk)->sk_lock.slock);				\
-	debug_check_no_locks_freed((void *)&(sk)->sk_lock,		\
-			sizeof((sk)->sk_lock));				\
-	lockdep_set_class_and_name(&(sk)->sk_lock.slock,		\
-		       	(skey), (sname));				\
+	debug_check_no_locks_freed((void *)&(sk)->sk_lock, sizeof((sk)->sk_lock));	\
+	lockdep_set_class_and_name(&(sk)->sk_lock.slock, (skey), (sname));				\
 	lockdep_init_map(&(sk)->sk_lock.dep_map, (name), (key), 0);	\
 } while (0)
 

@@ -62,7 +62,8 @@ struct tcphdr
  *  (union is compatible to any of its members)
  *  This means this part of the code is -fstrict-aliasing safe now.
  */
-union tcp_word_hdr { 
+union tcp_word_hdr 
+{ 
 	struct tcphdr hdr;
 	__be32 		  words[5];
 }; 
@@ -214,21 +215,21 @@ struct tcp_options_received
 {
 /*	PAWS/RTTM data	*/
 	long	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
-	u32	ts_recent;	/* Time stamp to echo next		*/
-	u32	rcv_tsval;	/* Time stamp value             	*/
-	u32	rcv_tsecr;	/* Time stamp echo reply        	*/
+	u32		ts_recent;	/* Time stamp to echo next		*/
+	u32		rcv_tsval;	/* Time stamp value             	*/
+	u32		rcv_tsecr;	/* Time stamp echo reply        	*/
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
-		tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
-		dsack : 1,	/* D-SACK is scheduled			*/
-		wscale_ok : 1,	/* Wscale seen on SYN packet		*/
-		sack_ok : 4,	/* SACK seen on SYN packet		*/
-		snd_wscale : 4,	/* Window scaling received from sender	*/
-		rcv_wscale : 4;	/* Window scaling to send to receiver	*/
+			tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
+			dsack : 1,	/* D-SACK is scheduled			*/
+			wscale_ok : 1,	/* Wscale seen on SYN packet		*/
+			sack_ok : 4,	/* SACK seen on SYN packet		*/
+			snd_wscale : 4,	/* Window scaling received from sender	*/
+			rcv_wscale : 4;	/* Window scaling to send to receiver	*/
 /*	SACKs data	*/
-	u8	eff_sacks;	/* Size of SACK array to send with next packet */
-	u8	num_sacks;	/* Number of SACK blocks		*/
-	u16	user_mss;  	/* mss requested by user in ioctl */
-	u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
+	u8		eff_sacks;	/* Size of SACK array to send with next packet */
+	u8		num_sacks;	/* Number of SACK blocks		*/
+	u16		user_mss;  	/* mss requested by user in ioctl */
+	u16		mss_clamp;	/* Maximal mss, negotiated at connection setup */
 };
 
 struct tcp_request_sock {
@@ -278,10 +279,15 @@ struct tcp_sock
 	/* Data for direct copy to user */
 	struct
 	{
+		///prequeue对列
 		struct sk_buff_head	prequeue;
+		///表示当前所处的进程，其实也就是skb的接受者
 		struct task_struct	*task;
+		///数据区
 		struct iovec		*iov;
+		///prequeue队列总的所占用的内存大小
 		int			memory;
+		///这个域表示用户所请求的长度(要注意这个值是可变的，随着拷贝给用户的数据而减少)
 		int			len;
 #ifdef CONFIG_NET_DMA
 		/* members for async copy */

@@ -765,8 +765,7 @@ static inline void __skb_queue_head(struct sk_buff_head *list,
  *	A buffer cannot be placed on two lists at the same time.
  */
 extern void skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk);
-static inline void __skb_queue_tail(struct sk_buff_head *list,
-				   struct sk_buff *newsk)
+static inline void __skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk)
 {
 	struct sk_buff *prev, *next;
 

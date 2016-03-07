@@ -42,7 +42,8 @@ struct request_sock_ops {
 
 /* struct request_sock - mini sock to represent a connection request
  */
-struct request_sock {
+struct request_sock 
+{
 	struct request_sock		*dl_next; /* Must be first member! */
 	u16				mss;
 	u8				retrans;
@@ -85,7 +86,8 @@ extern int sysctl_max_syn_backlog;
  *
  * @max_qlen_log - log_2 of maximal queued SYNs/REQUESTs
  */
-struct listen_sock {
+struct listen_sock
+{
 	u8			max_qlen_log;
 	/* 3 bytes hole, try to use */
 	int			qlen;
@@ -112,7 +114,8 @@ struct listen_sock {
  * don't need to grab this lock in read mode too as rskq_accept_head. writes
  * are always protected from the main sock lock.
  */
-struct request_sock_queue {
+struct request_sock_queue 
+{
 	struct request_sock	*rskq_accept_head;
 	struct request_sock	*rskq_accept_tail;
 	rwlock_t		syn_wait_lock;

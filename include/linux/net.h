@@ -171,9 +171,7 @@ struct proto_ops
 				      int optname, char __user *optval, int __user *optlen);
 	int		(*sendmsg)   (struct kiocb *iocb, struct socket *sock,
 				      struct msghdr *m, size_t total_len);
-	int		(*recvmsg)   (struct kiocb *iocb, struct socket *sock,
-				      struct msghdr *m, size_t total_len,
-				      int flags);
+	int		(*recvmsg)   (struct kiocb *iocb, struct socket *sock, struct msghdr *m, size_t total_len, int flags);
 	int		(*mmap)	     (struct file *file, struct socket *sock,
 				      struct vm_area_struct * vma);
 	ssize_t		(*sendpage)  (struct socket *sock, struct page *page,
@@ -200,10 +198,8 @@ extern int	     sock_create_kern(int family, int type, int proto,
 extern int	     sock_create_lite(int family, int type, int proto,
 				      struct socket **res); 
 extern void	     sock_release(struct socket *sock);
-extern int   	     sock_sendmsg(struct socket *sock, struct msghdr *msg,
-				  size_t len);
-extern int	     sock_recvmsg(struct socket *sock, struct msghdr *msg,
-				  size_t size, int flags);
+extern int   	 sock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len);
+extern int	     sock_recvmsg(struct socket *sock, struct msghdr *msg, size_t size, int flags);
 extern int 	     sock_map_fd(struct socket *sock);
 extern struct socket *sockfd_lookup(int fd, int *err);
 #define		     sockfd_put(sock) fput(sock->file)

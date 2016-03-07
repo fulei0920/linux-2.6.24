@@ -582,8 +582,7 @@ static void tcp_v4_send_reset(struct sock *sk, struct sk_buff *skb)
 		rep.th.seq = th->ack_seq;
 	} else {
 		rep.th.ack = 1;
-		rep.th.ack_seq = htonl(ntohl(th->seq) + th->syn + th->fin +
-				       skb->len - (th->doff << 2));
+		rep.th.ack_seq = htonl(ntohl(th->seq) + th->syn + th->fin + skb->len - (th->doff << 2));
 	}
 
 	memset(&arg, 0, sizeof(arg));
@@ -1498,16 +1497,16 @@ static struct sock *tcp_v4_hnd_req(struct sock *sk, struct sk_buff *skb)
 	struct sock *nsk;
 	struct request_sock **prev;
 	/* Find possible connection requests. */
-	struct request_sock *req = inet_csk_search_req(sk, &prev, th->source,
-						       iph->saddr, iph->daddr);
+	struct request_sock *req = inet_csk_search_req(sk, &prev, th->source, iph->saddr, iph->daddr);
 	if (req)
 		return tcp_check_req(sk, skb, req, prev);
 
-	nsk = inet_lookup_established(&tcp_hashinfo, iph->saddr, th->source,
-				      iph->daddr, th->dest, inet_iif(skb));
+	nsk = inet_lookup_established(&tcp_hashinfo, iph->saddr, th->source, iph->daddr, th->dest, inet_iif(skb));
 
-	if (nsk) {
-		if (nsk->sk_state != TCP_TIME_WAIT) {
+	if (nsk)
+	{
+		if (nsk->sk_state != TCP_TIME_WAIT) 
+		{
 			bh_lock_sock(nsk);
 			return nsk;
 		}
@@ -1566,9 +1565,12 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 #endif
 
-	if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
+	if (sk->sk_state == TCP_ESTABLISHED) 
+	{ 	/* Fast path */
 		TCP_CHECK_TIMER(sk);
-		if (tcp_rcv_established(sk, skb, tcp_hdr(skb), skb->len)) {
+		///处理数据包
+		if (tcp_rcv_established(sk, skb, tcp_hdr(skb), skb->len))
+		{
 			rsk = sk;
 			goto reset;
 		}
@@ -1579,13 +1581,16 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	if (skb->len < tcp_hdrlen(skb) || tcp_checksum_complete(skb))
 		goto csum_err;
 
-	if (sk->sk_state == TCP_LISTEN) {
+	if (sk->sk_state == TCP_LISTEN) 
+	{
 		struct sock *nsk = tcp_v4_hnd_req(sk, skb);
 		if (!nsk)
 			goto discard;
 
-		if (nsk != sk) {
-			if (tcp_child_process(sk, nsk, skb)) {
+		if (nsk != sk) 
+		{
+			if (tcp_child_process(sk, nsk, skb))
+			{
 				rsk = nsk;
 				goto reset;
 			}
@@ -1594,7 +1599,8 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	}
 
 	TCP_CHECK_TIMER(sk);
-	if (tcp_rcv_state_process(sk, skb, tcp_hdr(skb), skb->len)) {
+	if (tcp_rcv_state_process(sk, skb, tcp_hdr(skb), skb->len)) 
+	{
 		rsk = sk;
 		goto reset;
 	}
@@ -1676,7 +1682,7 @@ process:
 		goto discard_and_relse;
 
 	skb->dev = NULL;
-
+	///加下半部的锁
 	bh_lock_sock_nested(sk);
 	ret = 0;
 	if (!sock_owned_by_user(sk))
@@ -1690,12 +1696,15 @@ process:
 		else
 #endif
 		{
+			///先将buffer放到prequeue队列中。如果成功则返回1
 			if (!tcp_prequeue(sk, skb))
-			ret = tcp_v4_do_rcv(sk, skb);
+				///失败，则直接调用tcp_v4_do_rcv处理这个skb(其实也就是直接放到receive_queue中)
+				ret = tcp_v4_do_rcv(sk, skb);
 		}
 	} 
 	else
 	{
+		///当有进程在使用这个sock则放buf到sk_backlog中
 		sk_add_backlog(sk, skb);
 	}
 		
@@ -2474,8 +2483,7 @@ struct proto tcp_prot = {
 
 void __init tcp_v4_init(struct net_proto_family *ops)
 {
-	if (inet_csk_ctl_sock_create(&tcp_socket, PF_INET, SOCK_RAW,
-				     IPPROTO_TCP) < 0)
+	if (inet_csk_ctl_sock_create(&tcp_socket, PF_INET, SOCK_RAW, IPPROTO_TCP) < 0)
 		panic("Failed to create the TCP control socket.\n");
 }
 

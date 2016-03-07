@@ -4504,8 +4504,8 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 	 *	PSH flag is ignored.
 	 */
 
-	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags &&
-		TCP_SKB_CB(skb)->seq == tp->rcv_nxt) {
+	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags && TCP_SKB_CB(skb)->seq == tp->rcv_nxt) 
+	{
 		int tcp_header_len = tp->tcp_header_len;
 
 		/* Timestamp header prediction: tcp_header_len
@@ -4514,7 +4514,8 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 		 */
 
 		/* Check timestamp */
-		if (tcp_header_len == sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) {
+		if (tcp_header_len == sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED)
+		{
 			__be32 *ptr = (__be32 *)(th + 1);
 
 			/* No? Slow path! */
@@ -4659,9 +4660,10 @@ slow_path:
 	/*
 	 * RFC1323: H1. Apply PAWS check first.
 	 */
-	if (tcp_fast_parse_options(skb, th, tp) && tp->rx_opt.saw_tstamp &&
-	    tcp_paws_discard(sk, skb)) {
-		if (!th->rst) {
+	if (tcp_fast_parse_options(skb, th, tp) && tp->rx_opt.saw_tstamp && tcp_paws_discard(sk, skb)) 
+	{
+		if (!th->rst) 
+		{
 			NET_INC_STATS_BH(LINUX_MIB_PAWSESTABREJECTED);
 			tcp_send_dupack(sk, skb);
 			goto discard;

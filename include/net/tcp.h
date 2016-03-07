@@ -889,29 +889,33 @@ static inline void tcp_prequeue_init(struct tcp_sock *tp)
 static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-
+	///task为空一般是表示进程空间有进程在等待sock的数据的到来，因此我们需要直接复制数据到receive队列，并唤醒它
 	if (!sysctl_tcp_low_latency && tp->ucopy.task)
 	{
 		__skb_queue_tail(&tp->ucopy.prequeue, skb);
 		tp->ucopy.memory += skb->truesize;
+		///如果prequeue已满，则将处理prequeue队列。
 		if (tp->ucopy.memory > sk->sk_rcvbuf) 
 		{
 			struct sk_buff *skb1;
 
 			BUG_ON(sock_owned_by_user(sk));
 
-			while ((skb1 = __skb_dequeue(&tp->ucopy.prequeue)) != NULL) {
+			while ((skb1 = __skb_dequeue(&tp->ucopy.prequeue)) != NULL)
+			{
+				///这个函数最终也会调用tcp_v4_do_rcv(也就是加入到receive队列中)
 				sk->sk_backlog_rcv(sk, skb1);
 				NET_INC_STATS_BH(LINUX_MIB_TCPPREQUEUEDROPPED);
 			}
-
+			///清空内存
 			tp->ucopy.memory = 0;
-		} else if (skb_queue_len(&tp->ucopy.prequeue) == 1) {
+		}
+		else if (skb_queue_len(&tp->ucopy.prequeue) == 1)
+		{
+			///这里表示这个数据包是prequeue的第一个包，然后唤醒等待队列
 			wake_up_interruptible(sk->sk_sleep);
 			if (!inet_csk_ack_scheduled(sk))
-				inet_csk_reset_xmit_timer(sk, ICSK_TIME_DACK,
-						          (3 * TCP_RTO_MIN) / 4,
-							  TCP_RTO_MAX);
+				inet_csk_reset_xmit_timer(sk, ICSK_TIME_DACK, (3 * TCP_RTO_MIN) / 4, TCP_RTO_MAX);
 		}
 		return 1;
 	}

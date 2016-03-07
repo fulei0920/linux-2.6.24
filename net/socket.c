@@ -629,8 +629,7 @@ void __sock_recv_timestamp(struct msghdr *msg, struct sock *sk,
 
 EXPORT_SYMBOL_GPL(__sock_recv_timestamp);
 
-static inline int __sock_recvmsg(struct kiocb *iocb, struct socket *sock,
-				 struct msghdr *msg, size_t size, int flags)
+static inline int __sock_recvmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg, size_t size, int flags)
 {
 	int err;
 	struct sock_iocb *si = kiocb_to_siocb(iocb);
@@ -648,8 +647,7 @@ static inline int __sock_recvmsg(struct kiocb *iocb, struct socket *sock,
 	return sock->ops->recvmsg(iocb, sock, msg, size, flags);
 }
 
-int sock_recvmsg(struct socket *sock, struct msghdr *msg,
-		 size_t size, int flags)
+int sock_recvmsg(struct socket *sock, struct msghdr *msg, size_t size, int flags)
 {
 	struct kiocb iocb;
 	struct sock_iocb siocb;
@@ -715,9 +713,7 @@ static struct sock_iocb *alloc_sock_iocb(struct kiocb *iocb,
 	return siocb;
 }
 
-static ssize_t do_sock_read(struct msghdr *msg, struct kiocb *iocb,
-		struct file *file, const struct iovec *iov,
-		unsigned long nr_segs)
+static ssize_t do_sock_read(struct msghdr *msg, struct kiocb *iocb, struct file *file, const struct iovec *iov, unsigned long nr_segs)
 {
 	struct socket *sock = file->private_data;
 	size_t size = 0;
@@ -737,8 +733,7 @@ static ssize_t do_sock_read(struct msghdr *msg, struct kiocb *iocb,
 	return __sock_recvmsg(iocb, sock, msg, size, msg->msg_flags);
 }
 
-static ssize_t sock_aio_read(struct kiocb *iocb, const struct iovec *iov,
-				unsigned long nr_segs, loff_t pos)
+static ssize_t sock_aio_read(struct kiocb *iocb, const struct iovec *iov, unsigned long nr_segs, loff_t pos)
 {
 	struct sock_iocb siocb, *x;
 
@@ -1895,8 +1890,7 @@ out:
  *	BSD recvmsg interface
  */
 
-asmlinkage long sys_recvmsg(int fd, struct msghdr __user *msg,
-			    unsigned int flags)
+asmlinkage long sys_recvmsg(int fd, struct msghdr __user *msg, unsigned int flags)
 {
 	struct compat_msghdr __user *msg_compat =
 	    (struct compat_msghdr __user *)msg;
