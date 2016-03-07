@@ -2182,11 +2182,9 @@ void __init vfs_caches_init(unsigned long mempages)
 	reserve = min((mempages - nr_free_pages()) * 3/2, mempages - 1);
 	mempages -= reserve;
 
-	names_cachep = kmem_cache_create("names_cache", PATH_MAX, 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC, NULL);
+	names_cachep = kmem_cache_create("names_cache", PATH_MAX, 0, SLAB_HWCACHE_ALIGN|SLAB_PANIC, NULL);
 
-	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
-			SLAB_HWCACHE_ALIGN|SLAB_PANIC, NULL);
+	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0, SLAB_HWCACHE_ALIGN|SLAB_PANIC, NULL);
 
 	dcache_init();
 	inode_init();

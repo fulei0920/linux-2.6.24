@@ -120,7 +120,8 @@ static int do_getname(const char __user *filename, char *page)
 	int retval;
 	unsigned long len = PATH_MAX;
 
-	if (!segment_eq(get_fs(), KERNEL_DS)) {
+	if (!segment_eq(get_fs(), KERNEL_DS)) 
+	{
 		if ((unsigned long) filename >= TASK_SIZE)
 			return -EFAULT;
 		if (TASK_SIZE - (unsigned long) filename < PATH_MAX)
@@ -128,12 +129,17 @@ static int do_getname(const char __user *filename, char *page)
 	}
 
 	retval = strncpy_from_user(page, filename, len);
-	if (retval > 0) {
+	if (retval > 0) 
+	{
 		if (retval < len)
 			return 0;
 		return -ENAMETOOLONG;
-	} else if (!retval)
+	}
+	else if (!retval)
+	{	
 		retval = -ENOENT;
+	}
+		
 	return retval;
 }
 
@@ -143,7 +149,8 @@ char * getname(const char __user * filename)
 
 	result = ERR_PTR(-ENOMEM);
 	tmp = __getname();
-	if (tmp)  {
+	if (tmp)  
+	{
 		int retval = do_getname(filename, tmp);
 
 		result = tmp;

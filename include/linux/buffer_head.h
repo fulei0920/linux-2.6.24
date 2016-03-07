@@ -16,7 +16,8 @@
 
 #ifdef CONFIG_BLOCK
 
-enum bh_state_bits {
+enum bh_state_bits 
+{
 	BH_Uptodate,	/* Contains valid data */
 	BH_Dirty,	/* Is dirty */
 	BH_Lock,	/* Is locked */
