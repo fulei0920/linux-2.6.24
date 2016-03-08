@@ -286,8 +286,7 @@ extern int			tcp_v4_remember_stamp(struct sock *sk);
 
 extern int		    	tcp_v4_tw_remember_stamp(struct inet_timewait_sock *tw);
 
-extern int			tcp_sendmsg(struct kiocb *iocb, struct socket *sock,
-					    struct msghdr *msg, size_t size);
+extern int			tcp_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg, size_t size);
 extern ssize_t			tcp_sendpage(struct socket *sock, struct page *page, int offset, size_t size, int flags);
 
 extern int			tcp_ioctl(struct sock *sk, 
@@ -886,14 +885,19 @@ static inline void tcp_prequeue_init(struct tcp_sock *tp)
  *
  * NOTE: is this not too big to inline?
  */
+///tcp_prequeue函数负责向prequeue中添加skb，无法添加的原因只有两个：
+///    一是用户为了降低延迟，全局关闭了prequeue的功能（通过sysctl_tcp_low_latency开关）
+///    二是当前没有进程/用户等待处理该sk上的报文，即tp->ucopy.task为0时，也不能使用prequeue。 
 static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	///task为空一般是表示进程空间有进程在等待sock的数据的到来，因此我们需要直接复制数据到receive队列，并唤醒它
+	///ucopy.task为NULL的话，表示当前没有pending的进程
 	if (!sysctl_tcp_low_latency && tp->ucopy.task)
 	{
 		__skb_queue_tail(&tp->ucopy.prequeue, skb);
 		tp->ucopy.memory += skb->truesize;
+		
 		///如果prequeue已满，则将处理prequeue队列。
 		if (tp->ucopy.memory > sk->sk_rcvbuf) 
 		{
@@ -912,7 +916,8 @@ static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 		}
 		else if (skb_queue_len(&tp->ucopy.prequeue) == 1)
 		{
-			///这里表示这个数据包是prequeue的第一个包，然后唤醒等待队列
+			///这里表示这个数据包是prequeue的第一个包，
+			///唤醒在该sock上的等待进程, 该进程在tcp_recvmsg函数中通过sk_wait_data调用进入该sock的等待队列
 			wake_up_interruptible(sk->sk_sleep);
 			if (!inet_csk_ack_scheduled(sk))
 				inet_csk_reset_xmit_timer(sk, ICSK_TIME_DACK, (3 * TCP_RTO_MIN) / 4, TCP_RTO_MAX);

@@ -1118,6 +1118,8 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 	struct sk_buff *skb;
 
 	///锁住当前的socket
+	///需要强调的是这里的锁操作只是把sk->sk_lock.owned置为1，表示当前sock上有用户进程而没有对其spinlock加锁，
+	///所以软中断可以把数据包加入backlog中，但此时软中断不能对prequeue和receive queue 操作
 	lock_sock(sk);
 
 	TCP_CHECK_TIMER(sk);
@@ -1132,8 +1134,8 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 	if (flags & MSG_OOB)
 		goto recv_urg;
 
-	///取得当前tcp字节流中的未读数据的起始序列号
 	seq = &tp->copied_seq;
+	///当设置了MSG_PEEK时，seq指针指向一个自动变量，其含义在于当读取后，下次读取任然从原有的位置开始 */
 	if (flags & MSG_PEEK)
 	{
 		peek_seq = tp->copied_seq;

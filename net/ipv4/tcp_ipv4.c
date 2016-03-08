@@ -1685,6 +1685,7 @@ process:
 	///加下半部的锁
 	bh_lock_sock_nested(sk);
 	ret = 0;
+	///判断当前sock是否被用户进程占用
 	if (!sock_owned_by_user(sk))
 	{
 #ifdef CONFIG_NET_DMA

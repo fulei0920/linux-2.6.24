@@ -4540,9 +4540,11 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 			 */
 		}
 
-		if (len <= tcp_header_len) {
+		if (len <= tcp_header_len)
+		{
 			/* Bulk data transfer: sender */
-			if (len == tcp_header_len) {
+			if (len == tcp_header_len) 
+			{
 				/* Predicted packet is in window by definition.
 				 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
 				 * Hence, check seq<=rcv_wup reduces to:
@@ -4559,16 +4561,20 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 				__kfree_skb(skb);
 				tcp_data_snd_check(sk);
 				return 0;
-			} else { /* Header too small */
+			} 
+			else 
+			{ /* Header too small */
 				TCP_INC_STATS_BH(TCP_MIB_INERRS);
 				goto discard;
 			}
-		} else {
+		}
+		else 
+		{
 			int eaten = 0;
 			int copied_early = 0;
 
-			if (tp->copied_seq == tp->rcv_nxt &&
-			    len - tcp_header_len <= tp->ucopy.len) {
+			if (tp->copied_seq == tp->rcv_nxt && len - tcp_header_len <= tp->ucopy.len) 
+			{
 #ifdef CONFIG_NET_DMA
 				if (tcp_dma_try_early_copy(sk, skb, tcp_header_len)) {
 					copied_early = 1;
@@ -4581,7 +4587,8 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 					if (!tcp_copy_to_iovec(sk, skb, tcp_header_len))
 						eaten = 1;
 				}
-				if (eaten) {
+				if (eaten) 
+				{
 					/* Predicted packet is in window by definition.
 					 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
 					 * Hence, check seq<=rcv_wup reduces to:
@@ -4601,7 +4608,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 				if (copied_early)
 					tcp_cleanup_rbuf(sk, skb->len);
 			}
-			if (!eaten) {
+
+			if (!eaten)
+			{
 				if (tcp_checksum_complete_user(sk, skb))
 					goto csum_error;
 
@@ -4609,9 +4618,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 				 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
 				 * Hence, check seq<=rcv_wup reduces to:
 				 */
-				if (tcp_header_len ==
-				    (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) &&
-				    tp->rcv_nxt == tp->rcv_wup)
+				if (tcp_header_len == (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) && tp->rcv_nxt == tp->rcv_wup)
 					tcp_store_ts_recent(tp);
 
 				tcp_rcv_rtt_measure_ts(sk, skb);
