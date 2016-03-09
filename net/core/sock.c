@@ -1380,7 +1380,7 @@ int sk_wait_data(struct sock *sk, long *timeo)
 	int rc;
 	DEFINE_WAIT(wait);
 	
-	///加入sk_sleep的等待队列
+	///加入sk_sleep的等待队列， 该等待队列当有数据包进入prequeue或receive queue时唤醒
 	prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
 	set_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
 	///处理事件

@@ -79,8 +79,11 @@
  */
 typedef struct 
 {
-	spinlock_t		slock;
-	///如果有用户进程在使用这个sock 则owned为1,否则为0  
+	//用于软中断和一个用户进程对backlog 队列的互斥访问
+	//用于软中断和多个用户进程间对owned字段的互斥访问
+	//拥有owned字段的软中断或者进程能够访问prepare队列和receive 队列
+	spinlock_t		slock;				
+	///如果有用户进程在使用这个sock 则owned为1,否则为0
 	int			owned;
 	///等待队列，也就是当sock被锁住后，等待使用这个sock的对象的队列
 	wait_queue_head_t	wq;
@@ -248,7 +251,9 @@ struct sock
 	unsigned short		sk_max_ack_backlog;
 	__u32			sk_priority;
 	struct ucred		sk_peercred;
+	//读数据的超时时间，由应用层通过SO_RCVTIMEO来设置套接字指定
 	long			sk_rcvtimeo;
+	//写数据的超时时间，由应用层通过SO_SNDTIMEO来设置套接字指定
 	long			sk_sndtimeo;
 	struct sk_filter      	*sk_filter;
 	void			*sk_protinfo;
@@ -494,6 +499,8 @@ static inline void sk_add_backlog(struct sock *sk, struct sk_buff *skb)
 
 #define sk_wait_event(__sk, __timeo, __condition)			\
 	({	int __rc;						\
+		/* 解锁时可能会处理backlog中数据包，如果有的话，__rc就为1，无需等待 
+ ；没有可处理的话，就置used成员为0，这样软中断可以接收数据到prequeue队列中，重而唤醒本进程 */ 
 		release_sock(__sk);					\
 		__rc = __condition;					\
 		if (!__rc) {						\

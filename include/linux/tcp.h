@@ -107,18 +107,26 @@ enum {
 enum tcp_ca_state
 {
 	//初始状态，也就是没有检测到任何拥塞的情况.
+	//正常状态，执行slow start算法或者是congestion avoid算法，取决于拥塞窗口和ssthresh的大小
 	TCP_CA_Open = 0,
 #define TCPF_CA_Open	(1<<TCP_CA_Open)
 	//状态就是当第一次由于收到SACK或者重复的ack而检测到拥塞时，就进入这个状态
+	//当检测到duplicate ack或者是SACK时，进入此状态。在此状态下拥塞窗口不调整，没收到一个数据包都触发一个新的数据包的发送。
 	TCP_CA_Disorder = 1,
 #define TCPF_CA_Disorder (1<<TCP_CA_Disorder)
 	//由于一些拥塞通知事件而导致拥塞窗口减小,然后就会进入这个状态。比如ECN，ICMP，本地设备拥塞
+	//检测到由ECN，ICMP，或者本地设置引起的拥塞提示时，进入此状态。在此状态下，每收到2个ACK就把拥塞窗口-1，直到减为原来的一半
 	TCP_CA_CWR = 2,
 #define TCPF_CA_CWR	(1<<TCP_CA_CWR)
 	// 当CWND减小
+	//当检测到3个重复的ACK时进入此状态，一般由Disorder状态进入。立即重传第一个未确认的数据包，每收到2个ACK就把拥塞窗口-1
+	//直到见到ssthresh（此值在进入Recovery状态时设置为拥塞窗口的一半）。TCP停留在此状态直到刚进入此状态时所有驻留网络的数据包都得到确认，然后
+	//返回到open状态
 	TCP_CA_Recovery = 3,
 #define TCPF_CA_Recovery (1<<TCP_CA_Recovery)
 	//超时或者SACK被拒绝，此时表示数据包丢失，因此进入这个状态
+	//当RTO定时器超时时，进入此状态。所有驻留于网络的数据包都标记为Lost，拥塞窗口设置为1，启用slow start算法
+	//当进入此状态时所有驻留于网络的数据包得到确认后，返回到Open状态
 	TCP_CA_Loss = 4
 #define TCPF_CA_Loss	(1<<TCP_CA_Loss)
 };
@@ -319,8 +327,9 @@ struct tcp_sock
 	u32	mdev_max;	/* maximal mdev for the last rtt period	*/
 	u32	rttvar;		/* smoothed mdev_max			*/
 	u32	rtt_seq;	/* sequence number to update rttvar	*/
-
+	//snd.una后面的数据包
 	u32	packets_out;	/* Packets which are "in flight"	*/
+	//重传数据包计数
 	u32	retrans_out;	/* Retransmitted packets out		*/
 /*
  *      Options received (usually on last packet, some only on SYN packets).
@@ -360,8 +369,7 @@ struct tcp_sock
 
 	struct tcp_sack_block_wire recv_sack_cache[4];
 
-	u32	highest_sack;	/* Start seq of globally highest revd SACK
-				 * (validity guaranteed only if sacked_out > 0) */
+	u32	highest_sack;	/* Start seq of globally highest revd SACK(validity guaranteed only if sacked_out > 0) */
 
 	/* from STCP, retrans queue hinting */
 	struct sk_buff* lost_skb_hint;
@@ -381,7 +389,15 @@ struct tcp_sock
 	u16	advmss;		/* Advertised MSS			*/
 	//前一个snd_ssthresh得大小，也就是说每次改变snd_ssthresh前都要保存老的snd_ssthresh
 	u16	prior_ssthresh; /* ssthresh saved at recovery start	*/
-	u32	lost_out;	/* Lost packets			*/
+	//Packets lost by network. TCP has no explicit "loss notification" feedback from network (for now).
+	//It means that this number can be only _guessed_. Actually, it is the heuristics to predict lossage that
+	//distinguishes different algorithms.
+	//网络中丢失的数据包的计数，是一个估计值，取决于具体实现
+	u32	lost_out;	
+	//Packets, which arrived to receiver out of order and hence not ACKed. With SACKs this number is simply
+	//amount of SACKed data. Even without SACKs it is easy to give pretty reliable estimate of this number,
+	//counting duplicate ACKs.
+	//由SACK确认的数据包（当没有SACK时，duplicate ack 也使该计数+1）
 	u32	sacked_out;	/* SACK'd packets			*/
 	u32	fackets_out;	/* FACK'd packets			*/
 	//拥塞开始时，snd_nxt的大小
@@ -417,14 +433,16 @@ struct tcp_sock
 	} rcv_rtt_est;
 
 /* Receiver queue space */
-	struct {
+	struct 
+	{
 		int	space;
 		u32	seq;
 		u32	time;
 	} rcvq_space;
 
 /* TCP-specific MTU probe information. */
-	struct {
+	struct 
+	{
 		u32		  probe_seq_start;
 		u32		  probe_seq_end;
 	} mtu_probe;

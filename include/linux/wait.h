@@ -47,7 +47,8 @@ struct wait_bit_queue {
 	wait_queue_t wait;
 };
 
-struct __wait_queue_head {
+struct __wait_queue_head 
+{
 	spinlock_t lock;
 	struct list_head task_list;
 };

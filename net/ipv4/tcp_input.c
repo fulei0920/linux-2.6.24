@@ -1911,7 +1911,7 @@ static inline int tcp_head_timedout(struct sock *sk)
  *
  * Counting packets in flight is pretty simple.
  *
- *	in_flight = packets_out - left_out + retrans_out
+ *	in_flight = packets_out + retrans_out - left_out
  *
  *	packets_out is SND.NXT-SND.UNA counted in packets.
  *
