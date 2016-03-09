@@ -490,13 +490,13 @@ static inline void tcp_push(struct sock *sk, int flags, int mss_now, int nonagle
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (tcp_send_head(sk)) {
+	if (tcp_send_head(sk)) 
+	{
 		struct sk_buff *skb = tcp_write_queue_tail(sk);
 		if (!(flags & MSG_MORE) || forced_push(tp))
 			tcp_mark_push(tp, skb);
 		tcp_mark_urg(tp, flags, skb);
-		__tcp_push_pending_frames(sk, mss_now,
-					  (flags & MSG_MORE) ? TCP_NAGLE_CORK : nonagle);
+		__tcp_push_pending_frames(sk, mss_now, (flags & MSG_MORE) ? TCP_NAGLE_CORK : nonagle);
 	}
 }
 
@@ -657,8 +657,8 @@ static inline int select_size(struct sock *sk)
 	return tmp;
 }
 
-int tcp_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
-		size_t size)
+//无论是使用阻塞还是非阻塞套接字，发送方法成功返回时（无论全部成功或者部分成功），既不代表TCP连接的另一端主机接收到了消息，也不代表本机把消息发送到了网络上，只是说明，内核将会试图保证把消息送达对方
+int tcp_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg, size_t size)
 {
 	struct sock *sk = sock->sk;
 	struct iovec *iov;
@@ -673,6 +673,7 @@ int tcp_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
 	TCP_CHECK_TIMER(sk);
 
 	flags = msg->msg_flags;
+	//当这个套接字是阻塞套接字时，timeo就是SO_SNDTIMEO选项指定的发送超时时间。如果这个套接字是非阻塞套接字， timeo变量就会是0。
 	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 
 	/* Wait for a connection to finish. */
@@ -695,7 +696,8 @@ int tcp_sendmsg(struct kiocb *iocb, struct socket *sock, struct msghdr *msg,
 	if (sk->sk_err || (sk->sk_shutdown & SEND_SHUTDOWN))
 		goto do_error;
 
-	while (--iovlen >= 0) {
+	while (--iovlen >= 0)
+	{
 		int seglen = iov->iov_len;
 		unsigned char __user *from = iov->iov_base;
 
@@ -842,7 +844,7 @@ wait_for_sndbuf:
 wait_for_memory:
 			if (copied)
 				tcp_push(sk, flags & ~MSG_MORE, mss_now, TCP_NAGLE_PUSH);
-
+			//sk_stream_wait_memory对于非阻塞套接字会直接返回，并将 errno错误码置为EAGAIN。
 			if ((err = sk_stream_wait_memory(sk, &timeo)) != 0)
 				goto do_error;
 
@@ -859,7 +861,8 @@ out:
 	return copied;
 
 do_fault:
-	if (!skb->len) {
+	if (!skb->len) 
+	{
 		tcp_unlink_write_queue(skb, sk);
 		/* It is the one place in all of TCP, except connection
 		 * reset, where we can be unlinking the send_head.
@@ -1117,7 +1120,7 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 	int copied_early = 0;
 	struct sk_buff *skb;
 
-	///锁住当前的socket
+	///锁住当前的socket, 防止多进程并发访问TCP连接，告知软中断目前socket在进程上下文中
 	///需要强调的是这里的锁操作只是把sk->sk_lock.owned置为1，表示当前sock上有用户进程而没有对其spinlock加锁，
 	///所以软中断可以把数据包加入backlog中，但此时软中断不能对prequeue和receive queue 操作
 	lock_sock(sk);
@@ -1128,21 +1131,27 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 	if (sk->sk_state == TCP_LISTEN)
 		goto out;
 
+	//如果socket是阻塞套接字，则取出SO_RCVTIMEO作为读超时时间；若为非阻塞，则timeo为0
 	timeo = sock_rcvtimeo(sk, nonblock);
 
 	/* Urgent data needs to be handled specially. */
 	if (flags & MSG_OOB)
 		goto recv_urg;
-
+	
+	//注意：seq的定义为u32 *seq;，它是32位指针。为何？因为下面每向用户态内存拷贝后，会更新seq的值，这时就会直接更改套接字上的copied_seq 
 	seq = &tp->copied_seq;
 	///当设置了MSG_PEEK时，seq指针指向一个自动变量，其含义在于当读取后，下次读取任然从原有的位置开始 */
+	/////当flags参数有MSG_PEEK标志位时，意味着这次拷贝的内容，当再次读取socket时（比如另一个进程）还能再次读到
 	if (flags & MSG_PEEK)
 	{
+		//所以不会更新copied_seq，当然，下面会看到也不会删除报文，不会从receive队列中移除报文  
 		peek_seq = tp->copied_seq;
 		seq = &peek_seq;
 	}
 
 	///主要是用来处理MSG_WAITALL套接字选项。这个选项是用来标记是否等待所有的数据到达才返回的。
+	//获取SO_RCVLOWAT最低接收阀值，当然，target实际上是用户态内存大小len和SO_RCVLOWAT的最小值  
+    //注意：flags参数中若携带MSG_WAITALL标志位，则意味着必须等到读取到len长度的消息才能返回，此时target只能是len
 	target = sock_rcvlowat(sk, flags & MSG_WAITALL, len);
 
 #ifdef CONFIG_NET_DMA
@@ -1167,6 +1176,7 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 	}
 #endif
 
+	//以下开始读取消息  
 	do 
 	{
 		u32 offset;
@@ -1186,9 +1196,11 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 
 		/* Next get a buffer. */
 		///开始处理buffer，首先是从receive队列中读取buffer。  
+		//从receive队列取出1个报文  
 		skb = skb_peek(&sk->sk_receive_queue);
 		do
 		{
+			//没取到退出当前循环
 			if (!skb)
 				break;
 
@@ -1201,6 +1213,8 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 			///由于tcp是字节流，因此我们拷贝给用户空间，需要正序的拷贝给用户，这里的第一个seq前面已经描述了，
 			///表示当前的总的sock连接中的未读数据的起始序列号，而后一个seq表示当前skb的起始序列号。
 			///因此这个差值如果小于skb->len,就表示，当前的skb就是我们需要读取的那个skb(因为它的序列号最小).
+
+			////offset是待拷贝序号在当前这个报文中的偏移量，只有因为用户内存不足以接收完1个报文时才为非0 
 			offset = *seq - TCP_SKB_CB(skb)->seq;
 			if (tcp_hdr(skb)->syn)
 				offset--;
@@ -1253,8 +1267,10 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 				break;
 			}
 
+			//如果使用了非阻塞套接字，此时timeo为0 
 			if (!timeo) 
 			{
+				//非阻塞套接字读取不到数据时也会返回，错误码正是EAGAIN  
 				copied = -EAGAIN;
 				break;
 			}
@@ -1318,11 +1334,13 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 			 * unfortunately.
 			 */
 			//如果prequeue不为空则 先处理
+			 //prequeue队列就是为了提高系统整体效率的，即prequeue队列有可能不为空，这是因为进程休眠等待时可能有新报文到达prequeue队列
 			if (!skb_queue_empty(&tp->ucopy.prequeue))
 				goto do_prequeue;
 
 			/* __ Set realtime policy in scheduler __ */
 		}
+		//如果已经拷贝了的字节数超过了最低阀值
 		///已经复制完毕，则开始拷贝back_log队列到receive队列。
 		///否则进入休眠，等待数据的到来
 		if (copied >= target) 
@@ -1331,14 +1349,14 @@ int tcp_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg, size_t 
 			/* Do not sleep, just process backlog. */
 			///这里要注意，sock一共有两个等待队列，一个是sock的sk_sleep等待队列，这个等待队列用来等待数据的到来。
 			///一个是ucopy域的等待队列wq，这个表示等待使用这个sock。 
-			release_sock(sk);
-			lock_sock(sk);
+			release_sock(sk);  ///release_sock这个方法会遍历、处理backlog队列中的报文
+			lock_sock(sk);   //?
 		} 
 		else
 		{	
 			///当数据tp->ucopy.prequeue为空，并且所复制的数据不能达到所期望的值
 			/* 数据读取未完成，也不确定backlog中是否有数据，所以需要一个等待的操作*/
-			sk_wait_data(sk, &timeo);
+			sk_wait_data(sk, &timeo);  //没有读取到足够长度的消息，因此会进程休眠，如果没有被唤醒，最长睡眠timeo时间
 		}
 			
 
@@ -1380,12 +1398,15 @@ do_prequeue:		/* 调用 tcp_v4_do_rcv处理prequeue中skb */
 			peek_seq = tp->copied_seq;
 		}
 
-		/* 开始下一次循环，接下来的是receive queue中skb的数据读取，所以不进入 */
+		/* 开始下一次循环，接下来的是receive queue中skb的数据读取 */
+		//继续处理receive队列的下一个报文
 		continue;
 
 	found_ok_skb:
 		/* Ok so how much can we use? */
+		 //receive队列的这个报文从其可以使用的偏移量offset，到总长度len之间，可以拷贝的长度为used  
 		used = skb->len - offset;
+		//len是用户态空闲内存，len更小时，当然只能拷贝len长度消息，总不能导致内存溢出吧  
 		if (len < used)
 			used = len;
 
@@ -1413,7 +1434,7 @@ do_prequeue:		/* 调用 tcp_v4_do_rcv处理prequeue中skb */
 					
 			}
 		}
-
+	//MSG_TRUNC标志位表示不要管len这个用户态内存有多大，只管拷贝数据吧  
 		if (!(flags & MSG_TRUNC)) 
 		{
 #ifdef CONFIG_NET_DMA
@@ -1452,9 +1473,11 @@ do_prequeue:		/* 调用 tcp_v4_do_rcv处理prequeue中skb */
 				}
 			}
 		}
-
+		//因为是指针，所以同时更新copied_seq--下一个待接收的序号 
 		*seq += used;
+		//更新已经拷贝的长度  
 		copied += used;
+		//更新用户态内存的剩余空闲空间长度
 		len -= used;
 		/* 调整TCP接收缓存空间 */
 		tcp_rcv_space_adjust(sk);
@@ -1489,9 +1512,12 @@ skip_copy:
 	} 
 	while (len > 0);
 
+	//已经装载了接收器
 	if (user_recv) 
 	{
-		if (!skb_queue_empty(&tp->ucopy.prequeue)) {
+		//prequeue队列不为空则处理之  
+		if (!skb_queue_empty(&tp->ucopy.prequeue))
+		{
 			int chunk;
 
 			tp->ucopy.len = copied > 0 ? len : 0;
@@ -1506,6 +1532,7 @@ skip_copy:
 		}
 
 		/* 处理完后task复位为NULL， 表示当前sock没有进程占用 */
+		//准备返回用户态，socket上不再装载接收任务 
 		tp->ucopy.task = NULL;
 		tp->ucopy.len = 0;
 	}
@@ -1547,7 +1574,9 @@ skip_copy:
 	tcp_cleanup_rbuf(sk, copied);
 
 	TCP_CHECK_TIMER(sk);
+	//释放socket时，还会检查、处理backlog队列中的报文
 	release_sock(sk);
+	 //向用户返回已经拷贝的字节数
 	return copied;
 
 out:

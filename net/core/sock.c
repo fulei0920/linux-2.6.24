@@ -1331,6 +1331,7 @@ static void __lock_sock(struct sock *sk)
 	finish_wait(&sk->sk_lock.wq, &wait);
 }
 
+//遍历backlog队列  
 static void __release_sock(struct sock *sk)
 {
 	struct sk_buff *skb = sk->sk_backlog.head;
@@ -1346,6 +1347,7 @@ static void __release_sock(struct sock *sk)
 
 			skb->next = NULL;
 			//最终会调tcp_v4_do_rcv.而在tcp_v4_do_rcv中，会把数据复制到receive_queue队列中
+			////处理报文，其实就是tcp_v4_do_rcv方法
 			sk->sk_backlog_rcv(sk, skb);
 
 			/*
@@ -1384,6 +1386,7 @@ int sk_wait_data(struct sock *sk, long *timeo)
 	prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
 	set_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
 	///处理事件
+	  //注意，它的自动唤醒条件有两个，要么timeo时间到达，要么receive队列不为空
 	rc = sk_wait_event(sk, timeo, !skb_queue_empty(&sk->sk_receive_queue));
 	clear_bit(SOCK_ASYNC_WAITDATA, &sk->sk_socket->flags);
 	finish_wait(sk->sk_sleep, &wait);
@@ -1653,9 +1656,11 @@ void fastcall release_sock(struct sock *sk)
 	mutex_release(&sk->sk_lock.dep_map, 1, _RET_IP_);
 
 	spin_lock_bh(&sk->sk_lock.slock);
+	////这里会遍历backlog队列中的每一个报文  
 	if (sk->sk_backlog.tail)
 		__release_sock(sk);
 	///处理完毕则给owened赋值为0.释放对这个sock的控制
+	//这里是网络中断执行时，告诉内核，现在socket并不在进程上下文中  
 	sk->sk_lock.owned = 0;
 	///唤醒wq上的所有元素
 	if (waitqueue_active(&sk->sk_lock.wq))

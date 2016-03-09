@@ -244,14 +244,14 @@ EXPORT_SYMBOL(skb_kill_datagram);
  *
  *	Note: the iovec is modified during the copy.
  */
-int skb_copy_datagram_iovec(const struct sk_buff *skb, int offset,
-			    struct iovec *to, int len)
+int skb_copy_datagram_iovec(const struct sk_buff *skb, int offset, struct iovec *to, int len)
 {
 	int start = skb_headlen(skb);
 	int i, copy = start - offset;
 
 	/* Copy header. */
-	if (copy > 0) {
+	if (copy > 0) 
+	{
 		if (copy > len)
 			copy = len;
 		if (memcpy_toiovec(to, skb->data + offset, copy))
@@ -262,7 +262,8 @@ int skb_copy_datagram_iovec(const struct sk_buff *skb, int offset,
 	}
 
 	/* Copy paged appendix. Hmm... why does this look so complicated? */
-	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) 
+	{
 		int end;
 
 		BUG_TRAP(start <= offset + len);

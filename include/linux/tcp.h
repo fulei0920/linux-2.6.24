@@ -308,6 +308,7 @@ struct tcp_sock
 	} ucopy;
 
 	u32	snd_wl1;	/* Sequence for window update		*/
+	///对端通告的窗口大小(进过窗口扩大选项处理后的值)
 	u32	snd_wnd;	/* The window we expect to receive	*/
 	u32	max_window;	/* Maximal window ever seen from peer	*/
 	u32	mss_cache;	/* Cached effective mss, not including SACKS */
@@ -358,7 +359,7 @@ struct tcp_sock
 	u32	snd_cwnd_stamp;
 
 	struct sk_buff_head	out_of_order_queue; /* Out of order segments go here */
-
+	///通告给对端的窗口的大小
  	u32	rcv_wnd;	/* Current receiver window		*/
 	u32	write_seq;	/* Tail(+1) of data held in tcp send buffer */
 	u32	pushed_seq;	/* Last pushed seq, required to talk to windows */

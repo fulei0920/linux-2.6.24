@@ -416,8 +416,7 @@ extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct request_sock *req,
 							struct dst_entry *dst);
 
-extern int			tcp_v4_do_rcv(struct sock *sk,
-					      struct sk_buff *skb);
+extern int			tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb);
 
 extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
@@ -487,11 +486,22 @@ extern int tcp_mtu_to_mss(struct sock *sk, int pmtu);
 extern int tcp_mss_to_mtu(struct sock *sk, int mss);
 extern void tcp_mtup_init(struct sock *sk);
 
+
+//设置预测值--tcp头部长度，标志位，发送窗口大小
+//预测值含义
+//(1)Either the data transaction is taking place in only one direction (which means that we are the receiver
+//and not transmitting any data) or in the case where we are sending out data also, the window advertised
+//from the other end is constant. The latter means that we have not transmitted any data from our side for
+//quite some time but are receiving data from the other end. The receive window advertised by the other end is constant.
+//(2)Other than PSH|ACK flags in the TCP header, no other flag is set (ACK is set for each TCP segment). 
+//This means that if any other flag is set such as URG, FIN, SYN, ECN, RST, and CWR, we
+//know that something important is there to be attended and we need to move into the SLOW path.
+//(3)The header length has unchanged. If the TCP header length remains unchanged,
+//we have not added/reduced any TCP option and we can safely assume that
+//there is nothing important to be attended, if the above two conditions are TRUE.
 static inline void __tcp_fast_path_on(struct tcp_sock *tp, u32 snd_wnd)
 {
-	tp->pred_flags = htonl((tp->tcp_header_len << 26) |
-			       ntohl(TCP_FLAG_ACK) |
-			       snd_wnd);
+	tp->pred_flags = htonl((tp->tcp_header_len << 26) | ntohl(TCP_FLAG_ACK) | snd_wnd);
 }
 
 static inline void tcp_fast_path_on(struct tcp_sock *tp)
@@ -499,14 +509,15 @@ static inline void tcp_fast_path_on(struct tcp_sock *tp)
 	__tcp_fast_path_on(tp, tp->snd_wnd >> tp->rx_opt.snd_wscale);
 }
 
+//fast path工作的条件
 static inline void tcp_fast_path_check(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (skb_queue_empty(&tp->out_of_order_queue) &&
-	    tp->rcv_wnd &&
-	    atomic_read(&sk->sk_rmem_alloc) < sk->sk_rcvbuf &&
-	    !tp->urg_data)
+	if (skb_queue_empty(&tp->out_of_order_queue) &&			//没有乱序数据包
+	    tp->rcv_wnd &&										//接收窗口不为0
+	    atomic_read(&sk->sk_rmem_alloc) < sk->sk_rcvbuf &&  //还有接收缓存空间
+	    !tp->urg_data)										//没有紧急数据
 		tcp_fast_path_on(tp);
 }
 
@@ -757,7 +768,7 @@ static inline unsigned int tcp_left_out(const struct tcp_sock *tp)
  */
 static inline unsigned int tcp_packets_in_flight(const struct tcp_sock *tp)
 {
-	return tp->packets_out - tcp_left_out(tp) + tp->retrans_out;
+	return tp->packets_out + tp->retrans_out - tcp_left_out(tp);
 }
 
 /* If cwnd > ssthresh, we may raise ssthresh to be half-way to cwnd.
@@ -893,12 +904,15 @@ static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 	struct tcp_sock *tp = tcp_sk(sk);
 	///task为空一般是表示进程空间有进程在等待sock的数据的到来，因此我们需要直接复制数据到receive队列，并唤醒它
 	///ucopy.task为NULL的话，表示当前没有pending的进程
+	//检查tcp_low_latency，默认其为0，表示使用prequeue队列。tp->ucopy.task不为0，表示有进程启动了拷贝TCP消息的流程
 	if (!sysctl_tcp_low_latency && tp->ucopy.task)
 	{
+		////到这里，通常是用户进程读数据时没读到指定大小的数据，休眠了。直接将报文插入prequeue队列的末尾，延后处理
 		__skb_queue_tail(&tp->ucopy.prequeue, skb);
 		tp->ucopy.memory += skb->truesize;
 		
 		///如果prequeue已满，则将处理prequeue队列。
+		// //当然，虽然通常是延后处理，但如果TCP的接收缓冲区不够用了，就会立刻处理prequeue队列里的所有报文  
 		if (tp->ucopy.memory > sk->sk_rcvbuf) 
 		{
 			struct sk_buff *skb1;
@@ -908,6 +922,7 @@ static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 			while ((skb1 = __skb_dequeue(&tp->ucopy.prequeue)) != NULL)
 			{
 				///这个函数最终也会调用tcp_v4_do_rcv(也就是加入到receive队列中)
+				////sk_backlog_rcv就是tcp_v4_do_rcv方法
 				sk->sk_backlog_rcv(sk, skb1);
 				NET_INC_STATS_BH(LINUX_MIB_TCPPREQUEUEDROPPED);
 			}
@@ -918,12 +933,16 @@ static inline int tcp_prequeue(struct sock *sk, struct sk_buff *skb)
 		{
 			///这里表示这个数据包是prequeue的第一个包，
 			///唤醒在该sock上的等待进程, 该进程在tcp_recvmsg函数中通过sk_wait_data调用进入该sock的等待队列
+
+			// //prequeue里有报文了，唤醒正在休眠等待数据的进程，让进程在它的上下文中处理这个prequeue队列的报文
 			wake_up_interruptible(sk->sk_sleep);
 			if (!inet_csk_ack_scheduled(sk))
 				inet_csk_reset_xmit_timer(sk, ICSK_TIME_DACK, (3 * TCP_RTO_MIN) / 4, TCP_RTO_MAX);
 		}
 		return 1;
 	}
+
+	//prequeue没有处理
 	return 0;
 }
 

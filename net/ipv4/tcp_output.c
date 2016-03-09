@@ -1022,6 +1022,7 @@ static void tcp_cwnd_validate(struct sock *sk)
 	}
 }
 
+//获取拥塞窗口与滑动窗口的最小长度，检查待发送的数据是否超出
 static unsigned int tcp_window_allows(struct tcp_sock *tp, struct sk_buff *skb, unsigned int mss_now, unsigned int cwnd)
 {
 	u32 window, cwnd_len;
@@ -1034,17 +1035,22 @@ static unsigned int tcp_window_allows(struct tcp_sock *tp, struct sk_buff *skb, 
 /* Can at least one segment of SKB be sent right now, according to the
  * congestion window rules?  If so, return how many segments are allowed.
  */
+
+//拥塞窗口就是下面的cwnd，它用来帮助慢启动的实现。
+//连接刚建立时，拥塞窗口的大小远小于发送窗口，它实际上是一个MSS。
+//每收到一个ACK，拥塞窗口扩大一个MSS大小，当然，拥塞窗口最大只能到对方通告的接收窗口大小。
+//当然，为了避免指数式增长，拥塞窗口大小的增长会更慢一些，是线性的平滑的增长过程。
 static inline unsigned int tcp_cwnd_test(struct tcp_sock *tp, struct sk_buff *skb)
 {
 	u32 in_flight, cwnd;
 
 	/* Don't be strict about the congestion window for the final FIN.  */
-	if ((TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN) &&
-	    tcp_skb_pcount(skb) == 1)
+	if ((TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN) && tcp_skb_pcount(skb) == 1)
 		return 1;
 
 	in_flight = tcp_packets_in_flight(tp);
 	cwnd = tp->snd_cwnd;
+	////如果拥塞窗口允许，需要返回依据拥塞窗口的大小，还能发送多少字节的数据  
 	if (in_flight < cwnd)
 		return (cwnd - in_flight);
 
@@ -1069,8 +1075,8 @@ static int tcp_init_tso_segs(struct sock *sk, struct sk_buff *skb, unsigned int 
 
 static inline int tcp_minshall_check(const struct tcp_sock *tp)
 {
-	return after(tp->snd_sml,tp->snd_una) &&
-		!after(tp->snd_sml, tp->snd_nxt);
+		//最后一次发送的小分组还没有被确认   //将要发送的序号是要大于等于上次发送分组对应的序号 
+	return after(tp->snd_sml,tp->snd_una) && !after(tp->snd_sml, tp->snd_nxt);
 }
 
 /* Return 0, if packet can be sent now without violation Nagle's rules:
@@ -1081,22 +1087,19 @@ static inline int tcp_minshall_check(const struct tcp_sock *tp)
  *    With Minshall's modification: all sent small packets are ACKed.
  */
 
-static inline int tcp_nagle_check(const struct tcp_sock *tp,
-				  const struct sk_buff *skb,
-				  unsigned mss_now, int nonagle)
+static inline int tcp_nagle_check(const struct tcp_sock *tp, const struct sk_buff *skb, unsigned mss_now, int nonagle)
 {
-	return (skb->len < mss_now &&
-		((nonagle&TCP_NAGLE_CORK) ||
-		 (!nonagle &&
-		  tp->packets_out &&
-		  tcp_minshall_check(tp))));
+	return (skb->len < mss_now && 		////先检查是否为小分组，即报文长度是否小于MSS 
+		((nonagle&TCP_NAGLE_CORK) || 
+		(!nonagle && 				////如果开启了Nagle算法
+		tp->packets_out && tcp_minshall_check(tp))));  //若已经有小分组发出（packets_out表示“飞行”中的分组）还没有确认
 }
 
 /* Return non-zero if the Nagle test allows this packet to be
  * sent now.
  */
-static inline int tcp_nagle_test(struct tcp_sock *tp, struct sk_buff *skb,
-				 unsigned int cur_mss, int nonagle)
+//当对请求的时延非常在意且网络环境非常好的时候（例如同一个机房内），Nagle算法可以关闭，这实在也没必要。使用TCP_NODELAY套接字选项就可以关闭Nagle算法
+static inline int tcp_nagle_test(struct tcp_sock *tp, struct sk_buff *skb, unsigned int cur_mss, int nonagle)
 {
 	/* Nagle rule does not apply to frames, which sit in the middle of the
 	 * write_queue (they have no chances to get new data).
@@ -1104,14 +1107,15 @@ static inline int tcp_nagle_test(struct tcp_sock *tp, struct sk_buff *skb,
 	 * This is implemented in the callers, where they modify the 'nonagle'
 	 * argument based upon the location of SKB in the send queue.
 	 */
+	//nonagle标志位设置了，返回1表示允许这个分组发送出去  
 	if (nonagle & TCP_NAGLE_PUSH)
 		return 1;
 
 	/* Don't use the nagle rule for urgent data (or for the final FIN).
 	 * Nagle can be ignored during F-RTO too (see RFC4138).
 	 */
-	if (tp->urg_mode || (tp->frto_counter == 2) ||
-	    (TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN))
+	////如果这个分组包含了四次握手关闭连接的FIN包，也可以发送出去
+	if (tp->urg_mode || (tp->frto_counter == 2) || (TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN))
 		return 1;
 
 	if (!tcp_nagle_check(tp, skb, cur_mss, nonagle))
@@ -1121,13 +1125,15 @@ static inline int tcp_nagle_test(struct tcp_sock *tp, struct sk_buff *skb,
 }
 
 /* Does at least the first segment of SKB fit into the send window? */
+//检查这一次要发送的报文最大序号是否超出了发送滑动窗口大小  
 static inline int tcp_snd_wnd_test(struct tcp_sock *tp, struct sk_buff *skb, unsigned int cur_mss)
 {
+	//end_seq待发送的最大序号 
 	u32 end_seq = TCP_SKB_CB(skb)->end_seq;
 
 	if (skb->len > cur_mss)
 		end_seq = TCP_SKB_CB(skb)->seq + cur_mss;
-
+	///snd_una是已经发送过的数据中，最小的没被确认的序号；而snd_wnd就是发送窗口的大小  
 	return !after(end_seq, tp->snd_una + tp->snd_wnd);
 }
 
@@ -1135,8 +1141,7 @@ static inline int tcp_snd_wnd_test(struct tcp_sock *tp, struct sk_buff *skb, uns
  * should be put on the wire right now.  If so, it returns the number of
  * packets allowed by the congestion window.
  */
-static unsigned int tcp_snd_test(struct sock *sk, struct sk_buff *skb,
-				 unsigned int cur_mss, int nonagle)
+static unsigned int tcp_snd_test(struct sock *sk, struct sk_buff *skb, unsigned int cur_mss, int nonagle)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int cwnd_quota;
@@ -1147,8 +1152,7 @@ static unsigned int tcp_snd_test(struct sock *sk, struct sk_buff *skb,
 		return 0;
 
 	cwnd_quota = tcp_cwnd_test(tp, skb);
-	if (cwnd_quota &&
-	    !tcp_snd_wnd_test(tp, skb, cur_mss))
+	if (cwnd_quota && !tcp_snd_wnd_test(tp, skb, cur_mss))
 		cwnd_quota = 0;
 
 	return cwnd_quota;
@@ -1543,9 +1547,9 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
 		BUG_ON(!tso_segs);
 
 		limit = mss_now;
-		if (tso_segs > 1) {
-			limit = tcp_window_allows(tp, skb,
-						  mss_now, cwnd_quota);
+		if (tso_segs > 1) 
+		{
+			limit = tcp_window_allows(tp, skb, mss_now, cwnd_quota);
 
 			if (skb->len < limit) {
 				unsigned int trim = skb->len % mss_now;
@@ -1555,8 +1559,7 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
 			}
 		}
 
-		if (skb->len > limit &&
-		    unlikely(tso_fragment(sk, skb, limit, mss_now)))
+		if (skb->len > limit && unlikely(tso_fragment(sk, skb, limit, mss_now)))
 			return;
 
 		/* Send it out now. */
@@ -2283,8 +2286,7 @@ static void tcp_connect_init(struct sock *sk)
 	/* We'll fix this up when we get a response from the other end.
 	 * See tcp_input.c:tcp_rcv_state_process case TCP_SYN_SENT.
 	 */
-	tp->tcp_header_len = sizeof(struct tcphdr) +
-		(sysctl_tcp_timestamps ? TCPOLEN_TSTAMP_ALIGNED : 0);
+	tp->tcp_header_len = sizeof(struct tcphdr) + (sysctl_tcp_timestamps ? TCPOLEN_TSTAMP_ALIGNED : 0);
 
 #ifdef CONFIG_TCP_MD5SIG
 	if (tp->af_specific->md5_lookup(sk, sk) != NULL)

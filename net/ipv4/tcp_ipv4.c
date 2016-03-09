@@ -1569,6 +1569,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	{ 	/* Fast path */
 		TCP_CHECK_TIMER(sk);
 		///处理数据包
+		 //当TCP连接已经建立好时，是由tcp_rcv_established方法处理接收报文的
 		if (tcp_rcv_established(sk, skb, tcp_hdr(skb), skb->len))
 		{
 			rsk = sk;
@@ -1685,7 +1686,7 @@ process:
 	///加下半部的锁
 	bh_lock_sock_nested(sk);
 	ret = 0;
-	///判断当前sock是否被用户进程占用
+	///判断当前sock是否被用户进程占用(调用tcp_recvmsg，执行了lock_sock)
 	if (!sock_owned_by_user(sk))
 	{
 #ifdef CONFIG_NET_DMA
@@ -1698,14 +1699,17 @@ process:
 #endif
 		{
 			///先将buffer放到prequeue队列中。如果成功则返回1
+			//如果报文放在prequeue队列，即表示延后处理，不占用软中断过长时间
+			//返回0时，表示这个函数没有处理该报文
 			if (!tcp_prequeue(sk, skb))
-				///失败，则直接调用tcp_v4_do_rcv处理这个skb(其实也就是直接放到receive_queue中)
+				////不使用prequeue或者没有用户进程读socket时, 立刻开始处理这个报文  
+				///则直接调用tcp_v4_do_rcv处理这个buffer(其实也就是直接放到receive_queue中)
 				ret = tcp_v4_do_rcv(sk, skb);
 		}
 	} 
 	else
 	{
-		///当有进程在使用这个sock则放buf到sk_backlog中
+		///当有进程在使用这个sock则放buffer到backlog队列中
 		sk_add_backlog(sk, skb);
 	}
 		

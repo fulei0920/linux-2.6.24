@@ -501,11 +501,14 @@ static inline void sk_add_backlog(struct sock *sk, struct sk_buff *skb)
 	({	int __rc;						\
 		/* 解锁时可能会处理backlog中数据包，如果有的话，__rc就为1，无需等待 
  ；没有可处理的话，就置used成员为0，这样软中断可以接收数据到prequeue队列中，重而唤醒本进程 */ 
+
+/*它在睡眠前会调用release_sock，这个方法会释放socket锁，软中断中处理的新到的报文不再只能进入backlog队列*/
 		release_sock(__sk);					\
 		__rc = __condition;					\
 		if (!__rc) {						\
 			*(__timeo) = schedule_timeout(*(__timeo));	\
 		}							\
+		/*用户进程被唤醒后，重新调用lock_sock接管了这个socket，软中断中处理的新到的报文此后再进来的报文都只能进入backlog队列了*/
 		lock_sock(__sk);					\
 		__rc = __condition;					\
 		__rc;							\
@@ -838,8 +841,7 @@ extern void FASTCALL(release_sock(struct sock *sk));
 
 /* BH context may only use the following locking interface. */
 #define bh_lock_sock(__sk)	spin_lock(&((__sk)->sk_lock.slock))
-#define bh_lock_sock_nested(__sk) \
-				spin_lock_nested(&((__sk)->sk_lock.slock), SINGLE_DEPTH_NESTING)
+#define bh_lock_sock_nested(__sk) spin_lock_nested(&((__sk)->sk_lock.slock), SINGLE_DEPTH_NESTING)
 #define bh_unlock_sock(__sk)	spin_unlock(&((__sk)->sk_lock.slock))
 
 extern struct sock		*sk_alloc(struct net *net, int family,

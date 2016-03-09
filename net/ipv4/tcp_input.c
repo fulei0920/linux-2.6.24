@@ -302,8 +302,7 @@ static int __tcp_grow_window(const struct sock *sk, const struct sk_buff *skb)
 	return 0;
 }
 
-static void tcp_grow_window(struct sock *sk,
-			    struct sk_buff *skb)
+static void tcp_grow_window(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
@@ -562,6 +561,7 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	u32 now;
 
+	/* Ω” ’µΩ¡À ˝æ›£¨…Ë÷√ACK–Ëµ˜∂»±Í÷æ*/
 	inet_csk_schedule_ack(sk);
 
 	tcp_measure_rcv_mss(sk, skb);
@@ -570,7 +570,9 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 
 	now = tcp_time_stamp;
 
-	if (!icsk->icsk_ack.ato) {
+	/* “‘œ¬Œ™∏˘æ›Ω” ’º‰∏Ù∏¸–¬icsk_ack.ato£¨∏√÷µ÷˜“™”√”⁄≈–∂œpingpongƒ£ Ωº˚∫Ø ˝tcp_event_data_sent */  
+	if (!icsk->icsk_ack.ato)
+	{
 		/* The _first_ data packet received, initialize
 		 * delayed ACK engine.
 		 */
@@ -597,7 +599,7 @@ static void tcp_event_data_recv(struct sock *sk, struct sk_buff *skb)
 	icsk->icsk_ack.lrcvtime = now;
 
 	TCP_ECN_check_ce(tp, skb);
-
+	  /* √ø¥ŒΩ” ’µΩ¿¥◊‘∂‘∑Ωµƒ“ª∏ˆTCP ˝æ›±®£¨«“ ˝æ›±®≥§∂»¥Û”⁄128◊÷Ω⁄ ±£¨Œ“√«–Ë“™µ˜”√tcp_grow_window£¨‘ˆº”rcv_ssthreshµƒ÷µ£¨“ª∞„√ø¥ŒŒ™rcv_ssthresh‘ˆ≥§¡Ω±∂µƒmss£¨‘ˆº”µƒÃıº˛ «rcv_ssthresh–°”⁄window_clamp,≤¢«“ rcv_ssthresh–°”⁄Ω” ’ª∫¥Ê £”‡ø’º‰µƒ3/4£¨Õ¨ ±tcp_memory_pressure√ª”–±ª÷√Œª(º¥Ω” ’ª∫¥Ê÷–µƒ ˝æ›¡ø√ª”–Ã´¥Û)°£ tcp_grow_window÷–∂‘–¬ ’µΩµƒskbµƒ≥§∂»ªπ”–“ª–©œﬁ÷∆£¨≤¢≤ª◊‹ «‘ˆ≥§rcv_ssthreshµƒ÷µ*/ 
 	if (skb->len >= 128)
 		tcp_grow_window(sk, skb);
 }
@@ -2903,7 +2905,8 @@ static int tcp_ack_update_window(struct sock *sk, struct sk_buff *skb, u32 ack,
 		flag |= FLAG_WIN_UPDATE;
 		tcp_update_wl(tp, ack, ack_seq);
 
-		if (tp->snd_wnd != nwin) {
+		if (tp->snd_wnd != nwin) 
+		{
 			tp->snd_wnd = nwin;
 
 			/* Note, it is the only place, where
@@ -3694,29 +3697,33 @@ static void tcp_ofo_queue(struct sock *sk)
 	__u32 dsack_high = tp->rcv_nxt;
 	struct sk_buff *skb;
 
-	while ((skb = skb_peek(&tp->out_of_order_queue)) != NULL) {
+	 //±È¿˙out_of_order∂”¡–  
+	while ((skb = skb_peek(&tp->out_of_order_queue)) != NULL) 
+	{
 		if (after(TCP_SKB_CB(skb)->seq, tp->rcv_nxt))
 			break;
 
-		if (before(TCP_SKB_CB(skb)->seq, dsack_high)) {
+		if (before(TCP_SKB_CB(skb)->seq, dsack_high))
+		{
 			__u32 dsack = dsack_high;
 			if (before(TCP_SKB_CB(skb)->end_seq, dsack_high))
 				dsack_high = TCP_SKB_CB(skb)->end_seq;
 			tcp_dsack_extend(tp, TCP_SKB_CB(skb)->seq, dsack);
 		}
 
-		if (!after(TCP_SKB_CB(skb)->end_seq, tp->rcv_nxt)) {
+		if (!after(TCP_SKB_CB(skb)->end_seq, tp->rcv_nxt)) 
+		{
 			SOCK_DEBUG(sk, "ofo packet was already received \n");
 			__skb_unlink(skb, &tp->out_of_order_queue);
 			__kfree_skb(skb);
 			continue;
 		}
-		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n",
-			   tp->rcv_nxt, TCP_SKB_CB(skb)->seq,
-			   TCP_SKB_CB(skb)->end_seq);
-
+		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n", tp->rcv_nxt, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq);
+		//»Ù’‚∏ˆ±®Œƒø…“‘∞¥seq≤Â»Î”––Úµƒreceive∂”¡–÷–£¨‘ÚΩ´∆‰“∆≥ˆout_of_order∂”¡– 
 		__skb_unlink(skb, &tp->out_of_order_queue);
+		 //≤Â»Îreceive∂”¡–  
 		__skb_queue_tail(&sk->sk_receive_queue, skb);
+		 //∏¸–¬socket…œ¥˝Ω” ’µƒœ¬“ª∏ˆ”––Úseq 
 		tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 		if (tcp_hdr(skb)->fin)
 			tcp_fin(skb, sk, tcp_hdr(skb));
@@ -3738,7 +3745,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 
 	TCP_ECN_accept_cwr(tp, skb);
 
-	if (tp->rx_opt.dsack) {
+	if (tp->rx_opt.dsack) 
+	{
 		tp->rx_opt.dsack = 0;
 		tp->rx_opt.eff_sacks = min_t(unsigned int, tp->rx_opt.num_sacks,
 						    4 - tp->rx_opt.tstamp_ok);
@@ -3748,21 +3756,28 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	 *  Packets in sequence go to the receive queue.
 	 *  Out of sequence packets to the out_of_order_queue.
 	 */
-	if (TCP_SKB_CB(skb)->seq == tp->rcv_nxt) {
+	//»Áπ˚’‚∏ˆ±®Œƒ «¥˝Ω” ’µƒ±®Œƒ£®ø¥seq£©£¨À¸”–¡Ω∏ˆ≥ˆ¬∑£∫Ω¯»Îreceive∂”¡–£¨÷±Ω”øΩ±¥µΩ”√ªßƒ⁄¥Ê÷–£¨
+	if (TCP_SKB_CB(skb)->seq == tp->rcv_nxt) 
+	{
+		//ª¨∂Ø¥∞ø⁄Õ‚
 		if (tcp_receive_window(tp) == 0)
 			goto out_of_window;
 
 		/* Ok. In sequence. In window. */
-		if (tp->ucopy.task == current &&
-		    tp->copied_seq == tp->rcv_nxt && tp->ucopy.len &&
-		    sock_owned_by_user(sk) && !tp->urg_data) {
-			int chunk = min_t(unsigned int, skb->len,
-							tp->ucopy.len);
+		//»Áπ˚”–“ª∏ˆΩ¯≥Ã’˝‘⁄∂¡»°socket£¨«“’˝◊º±∏“™øΩ±¥µƒ–Ú∫≈æÕ «µ±«∞±®Œƒµƒseq–Ú∫≈  
+		// ‘⁄»Ì÷–∂œ…œœ¬Œƒ÷–sock_owned_by_user(sk)ø…ƒ‹Œ™1¬Â
+		if (tp->ucopy.task == current && tp->copied_seq == tp->rcv_nxt && tp->ucopy.len && sock_owned_by_user(sk) && !tp->urg_data) 
+		{
+			int chunk = min_t(unsigned int, skb->len, tp->ucopy.len);
 
 			__set_current_state(TASK_RUNNING);
 
 			local_bh_enable();
-			if (!skb_copy_datagram_iovec(skb, 0, tp->ucopy.iov, chunk)) {
+
+			//÷±Ω”Ω´±®Œƒƒ⁄»›øΩ±¥µΩ”√ªßÃ¨ƒ⁄¥Ê÷–
+			//
+			if (!skb_copy_datagram_iovec(skb, 0, tp->ucopy.iov, chunk)) 
+			{
 				tp->ucopy.len -= chunk;
 				tp->copied_seq += chunk;
 				eaten = (chunk == skb->len && !th->fin);
@@ -3771,25 +3786,29 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			local_bh_disable();
 		}
 
-		if (eaten <= 0) {
+		if (eaten <= 0) 
+		{
 queue_and_out:
-			if (eaten < 0 &&
-			    (atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf ||
-			     !sk_stream_rmem_schedule(sk, skb))) {
-				if (tcp_prune_queue(sk) < 0 ||
-				    !sk_stream_rmem_schedule(sk, skb))
+			if (eaten < 0 && (atomic_read(&sk->sk_rmem_alloc) > sk->sk_rcvbuf || !sk_stream_rmem_schedule(sk, skb)))
+			{
+				if (tcp_prune_queue(sk) < 0 || !sk_stream_rmem_schedule(sk, skb))
 					goto drop;
 			}
 			sk_stream_set_owner_r(skb, sk);
+			//»Áπ˚√ª”–ƒ‹πª÷±Ω”øΩ±¥µΩ”√ªßƒ⁄¥Ê÷–£¨ƒ«√¥£¨≤Â»Îreceive∂”¡–∞…
 			__skb_queue_tail(&sk->sk_receive_queue, skb);
 		}
+
+		//∏¸–¬¥˝Ω” ’µƒ–Ú∫≈
 		tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 		if (skb->len)
 			tcp_event_data_recv(sk, skb);
 		if (th->fin)
 			tcp_fin(skb, sk, th);
 
-		if (!skb_queue_empty(&tp->out_of_order_queue)) {
+		//’‚ ±ª·ºÏ≤Èout_of_order∂”¡–£¨»ÙÀ¸≤ªŒ™ø’£¨–Ë“™¥¶¿ÌÀ¸
+		if (!skb_queue_empty(&tp->out_of_order_queue)) 
+		{
 			tcp_ofo_queue(sk);
 
 			/* RFC2581. 4.2. SHOULD send immediate ACK, when
@@ -3863,16 +3882,17 @@ drop:
 		   tp->rcv_nxt, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq);
 
 	sk_stream_set_owner_r(skb, sk);
-
-	if (!skb_peek(&tp->out_of_order_queue)) {
+	//’‚∏ˆ∞¸ «Œﬁ–Úµƒ£¨”÷‘⁄Ω” ’ª¨∂Ø¥∞ø⁄ƒ⁄£¨∞—±®Œƒ≤Â»ÎµΩout_of_order∂”¡–∞…
+	if (!skb_peek(&tp->out_of_order_queue)) 
+	{
 		/* Initial out of order segment, build 1 SACK. */
-		if (tcp_is_sack(tp)) {
+		if (tcp_is_sack(tp))
+		{
 			tp->rx_opt.num_sacks = 1;
 			tp->rx_opt.dsack     = 0;
 			tp->rx_opt.eff_sacks = 1;
 			tp->selective_acks[0].start_seq = TCP_SKB_CB(skb)->seq;
-			tp->selective_acks[0].end_seq =
-						TCP_SKB_CB(skb)->end_seq;
+			tp->selective_acks[0].end_seq = TCP_SKB_CB(skb)->end_seq;
 		}
 		__skb_queue_head(&tp->out_of_order_queue,skb);
 	} else {
@@ -4374,10 +4394,10 @@ static int tcp_copy_to_iovec(struct sock *sk, struct sk_buff *skb, int hlen)
 	if (skb_csum_unnecessary(skb))
 		err = skb_copy_datagram_iovec(skb, hlen, tp->ucopy.iov, chunk);
 	else
-		err = skb_copy_and_csum_datagram_iovec(skb, hlen,
-						       tp->ucopy.iov);
+		err = skb_copy_and_csum_datagram_iovec(skb, hlen, tp->ucopy.iov);
 
-	if (!err) {
+	if (!err)
+	{
 		tp->ucopy.len -= chunk;
 		tp->copied_seq += chunk;
 		tcp_rcv_space_adjust(sk);
@@ -4391,11 +4411,14 @@ static __sum16 __tcp_checksum_complete_user(struct sock *sk, struct sk_buff *skb
 {
 	__sum16 result;
 
-	if (sock_owned_by_user(sk)) {
+	if (sock_owned_by_user(sk))
+	{
 		local_bh_enable();
 		result = __tcp_checksum_complete(skb);
 		local_bh_disable();
-	} else {
+	}
+	else
+	{
 		result = __tcp_checksum_complete(skb);
 	}
 	return result;
@@ -4403,8 +4426,7 @@ static __sum16 __tcp_checksum_complete_user(struct sock *sk, struct sk_buff *skb
 
 static inline int tcp_checksum_complete_user(struct sock *sk, struct sk_buff *skb)
 {
-	return !skb_csum_unnecessary(skb) &&
-		__tcp_checksum_complete_user(sk, skb);
+	return !skb_csum_unnecessary(skb) && __tcp_checksum_complete_user(sk, skb);
 }
 
 #ifdef CONFIG_NET_DMA
@@ -4499,11 +4521,13 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 	 *	if header_prediction is to be made
 	 *	'S' will always be tp->tcp_header_len >> 2
 	 *	'?' will be 0 for the fast path, otherwise pred_flags is 0 to
-	 *  turn it off	(when there are holes in the receive
-	 *	 space for instance)
+	 *  turn it off	(when there are holes in the receive space for instance)
 	 *	PSH flag is ignored.
 	 */
-
+	 
+	//Ω¯»Îfast pathµƒÃıº˛
+	//1.‘⁄≈≈≥˝RESERVED◊÷∂Œ∫ÕPSH±Í÷æŒª∫ÕÕ∑≤ø¬˙◊„pred_flags‘§≤‚
+	//2. ˝æ›∞¸“‘’˝»∑µƒÀ≥–Ú£®∏√ ˝æ›∞¸µƒµ⁄“ª∏ˆ–Ú∫≈æÕ «œ¬∏ˆ“™Ω” ’µƒ–Ú∫≈£©
 	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags && TCP_SKB_CB(skb)->seq == tp->rcv_nxt) 
 	{
 		int tcp_header_len = tp->tcp_header_len;
@@ -4519,8 +4543,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 			__be32 *ptr = (__be32 *)(th + 1);
 
 			/* No? Slow path! */
-			if (*ptr != htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
-					  | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP))
+			if (*ptr != htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP))
 				goto slow_path;
 
 			tp->rx_opt.saw_tstamp = 1;
@@ -4543,22 +4566,20 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 		if (len <= tcp_header_len)
 		{
 			/* Bulk data transfer: sender */
+			///»Áπ˚∑¢ÀÕ¿¥µƒΩˆ «“ª∏ˆTCPÕ∑µƒª∞£®√ª”–…”¥¯ ˝æ›ªÚ’ﬂΩ” ’∂ÀºÏ≤‚µΩ”–¬“–Ú ˝æ›’‚–©«Èøˆ ±∂ºª·∑¢ÀÕ“ª∏ˆ¥ø¥‚µƒACK∞¸£©
 			if (len == tcp_header_len) 
 			{
 				/* Predicted packet is in window by definition.
 				 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
 				 * Hence, check seq<=rcv_wup reduces to:
 				 */
-				if (tcp_header_len ==
-				    (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) &&
-				    tp->rcv_nxt == tp->rcv_wup)
+				if (tcp_header_len == (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) && tp->rcv_nxt == tp->rcv_wup)
 					tcp_store_ts_recent(tp);
 
-				/* We know that such packets are checksummed
-				 * on entry.
-				 */
+				/* We know that such packets are checksummed on entry.*/
 				tcp_ack(sk, skb, 0);
 				__kfree_skb(skb);
+				//ºÏ≤È «∑Ò”– ˝æ›¥˝∑¢ÀÕ
 				tcp_data_snd_check(sk);
 				return 0;
 			} 
@@ -4573,6 +4594,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 			int eaten = 0;
 			int copied_early = 0;
 
+			// ¥À ˝æ›∞¸∏’∫√ «”√ªßø’º‰œ¬“ª∏ˆ∂¡»°µƒ ˝æ›£¨≤¢«“”√ªßø’º‰ø…¥Ê∑≈œ¬∏√ ˝æ›∞¸*/  
 			if (tp->copied_seq == tp->rcv_nxt && len - tcp_header_len <= tp->ucopy.len) 
 			{
 #ifdef CONFIG_NET_DMA
@@ -4581,9 +4603,12 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 					eaten = 1;
 				}
 #endif
-				if (tp->ucopy.task == current && sock_owned_by_user(sk) && !copied_early) {
+				//»Áπ˚∏√∫Ø ˝‘⁄Ω¯≥Ã…œœ¬Œƒ÷–µ˜”√≤¢«“sock±ª”√ªß’º”√µƒª∞
+				if (tp->ucopy.task == current && sock_owned_by_user(sk) && !copied_early) 
+				{
+					//Ω¯≥Ã”–ø…ƒ‹±ª…Ë÷√Œ™TASK_INTERRUPTIBLE 
 					__set_current_state(TASK_RUNNING);
-
+					// ÷±Ω”copy ˝æ›µΩ”√ªßø’º‰
 					if (!tcp_copy_to_iovec(sk, skb, tcp_header_len))
 						eaten = 1;
 				}
@@ -4593,12 +4618,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 					 * seq == rcv_nxt and rcv_wup <= rcv_nxt.
 					 * Hence, check seq<=rcv_wup reduces to:
 					 */
-					if (tcp_header_len ==
-					    (sizeof(struct tcphdr) +
-					     TCPOLEN_TSTAMP_ALIGNED) &&
-					    tp->rcv_nxt == tp->rcv_wup)
+					if (tcp_header_len == (sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) && tp->rcv_nxt == tp->rcv_wup)
 						tcp_store_ts_recent(tp);
-
+					/* ∏¸–¬RCV RTT£¨Dynamic Right-SizingÀ„∑®*/
 					tcp_rcv_rtt_measure_ts(sk, skb);
 
 					__skb_pull(skb, tcp_header_len);
@@ -4609,6 +4631,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 					tcp_cleanup_rbuf(sk, skb->len);
 			}
 
+			//√ª”–÷±Ω”∂¡µΩ”√ªßø’º‰
 			if (!eaten)
 			{
 				if (tcp_checksum_complete_user(sk, skb))
@@ -4630,21 +4653,25 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb, struct tcphdr *th,
 
 				/* Bulk data transfer: receiver */
 				__skb_pull(skb,tcp_header_len);
+				/* Ω¯»Îreceive queue ≈≈∂”£¨“‘¥˝tcp_recvmsg∂¡»°*/
 				__skb_queue_tail(&sk->sk_receive_queue, skb);
 				sk_stream_set_owner_r(skb, sk);
 				tp->rcv_nxt = TCP_SKB_CB(skb)->end_seq;
 			}
 
+			/*  ˝æ›∞¸Ω” ’∫Û–¯¥¶¿Ì*/ 
 			tcp_event_data_recv(sk, skb);
 
-			if (TCP_SKB_CB(skb)->ack_seq != tp->snd_una) {
+			//ACK ¥¶¿Ì
+			if (TCP_SKB_CB(skb)->ack_seq != tp->snd_una)
+			{
 				/* Well, only one small jumplet in fast path... */
 				tcp_ack(sk, skb, FLAG_DATA);
 				tcp_data_snd_check(sk);
 				if (!inet_csk_ack_scheduled(sk))
 					goto no_ack;
 			}
-
+			/* ACK∑¢ÀÕ¥¶¿Ì*/  
 			__tcp_ack_snd_check(sk, 0);
 no_ack:
 #ifdef CONFIG_NET_DMA
@@ -4652,6 +4679,7 @@ no_ack:
 				__skb_queue_tail(&sk->sk_async_wait_queue, skb);
 			else
 #endif
+			/* eatenŒ™1£¨±Ì æ ˝æ›÷±Ω”copyµΩ¡À”√ªßø’º‰£¨’‚ ±Œﬁ–ËÃ·–—”√ªßΩ¯≥Ã ˝æ›µƒµΩ¥Ô£¨∑Ò‘Ú–Ëµ˜”√sk_data_ready¿¥Õ®÷™£¨“ÚŒ™¥À ± ˝æ›µΩ¥Ô¡Àreceive queue*/ 
 			if (eaten)
 				__kfree_skb(skb);
 			else
@@ -4686,7 +4714,8 @@ slow_path:
 	 *	Standard slow path.
 	 */
 
-	if (!tcp_sequence(tp, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq)) {
+	if (!tcp_sequence(tp, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq)) 
+	{
 		/* RFC793, page 37: "In all states except SYN-SENT, all reset
 		 * (RST) segments are validated by checking their SEQ-fields."
 		 * And page 69: "If an incoming segment is not acceptable,
@@ -4818,13 +4847,15 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb, s
 			tp->window_clamp = min(tp->window_clamp, 65535U);
 		}
 
-		if (tp->rx_opt.saw_tstamp) {
+		if (tp->rx_opt.saw_tstamp) 
+		{
 			tp->rx_opt.tstamp_ok	   = 1;
-			tp->tcp_header_len =
-				sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+			tp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
 			tp->advmss	    -= TCPOLEN_TSTAMP_ALIGNED;
 			tcp_store_ts_recent(tp);
-		} else {
+		} 
+		else 
+		{
 			tp->tcp_header_len = sizeof(struct tcphdr);
 		}
 
@@ -4986,8 +5017,7 @@ reset_and_undo:
  *	address independent.
  */
 
-int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
-			  struct tcphdr *th, unsigned len)
+int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb, struct tcphdr *th, unsigned len)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -4995,7 +5025,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 	tp->rx_opt.saw_tstamp = 0;
 
-	switch (sk->sk_state) {
+	switch (sk->sk_state)
+	{
 	case TCP_CLOSE:
 		goto discard;
 
