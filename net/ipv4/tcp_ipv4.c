@@ -738,8 +738,7 @@ static void tcp_v4_reqsk_send_ack(struct sk_buff *skb,
  *	This still operates on a request_sock only, not on a big
  *	socket.
  */
-static int tcp_v4_send_synack(struct sock *sk, struct request_sock *req,
-			      struct dst_entry *dst)
+static int tcp_v4_send_synack(struct sock *sk, struct request_sock *req, struct dst_entry *dst)
 {
 	const struct inet_request_sock *ireq = inet_rsk(req);
 	int err = -1;
@@ -751,7 +750,8 @@ static int tcp_v4_send_synack(struct sock *sk, struct request_sock *req,
 
 	skb = tcp_make_synack(sk, dst, req);
 
-	if (skb) {
+	if (skb) 
+	{
 		struct tcphdr *th = tcp_hdr(skb);
 
 		th->check = tcp_v4_check(skb->len,
@@ -1236,7 +1236,8 @@ done_opts:
 
 #endif
 
-struct request_sock_ops tcp_request_sock_ops __read_mostly = {
+struct request_sock_ops tcp_request_sock_ops __read_mostly = 
+{
 	.family		=	PF_INET,
 	.obj_size	=	sizeof(struct tcp_request_sock),
 	.rtx_syn_ack	=	tcp_v4_send_synack,
@@ -1273,17 +1274,18 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 #endif
 
 	/* Never answer to SYNs send to broadcast or multicast */
-	if (((struct rtable *)skb->dst)->rt_flags &
-	    (RTCF_BROADCAST | RTCF_MULTICAST))
+	if (((struct rtable *)skb->dst)->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
 		goto drop;
 
 	/* TW buckets are converted to open requests without
 	 * limitations, they conserve resources and peer is
 	 * evidently real one.
 	 */
-	if (inet_csk_reqsk_queue_is_full(sk) && !isn) {
+	if (inet_csk_reqsk_queue_is_full(sk) && !isn) 
+	{
 #ifdef CONFIG_SYN_COOKIES
-		if (sysctl_tcp_syncookies) {
+		if (sysctl_tcp_syncookies)
+		{
 			want_cookie = 1;
 		} else
 #endif
@@ -1312,12 +1314,14 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 
 	tcp_parse_options(skb, &tmp_opt, 0);
 
-	if (want_cookie) {
+	if (want_cookie)
+	{
 		tcp_clear_options(&tmp_opt);
 		tmp_opt.saw_tstamp = 0;
 	}
 
-	if (tmp_opt.saw_tstamp && !tmp_opt.rcv_tsval) {
+	if (tmp_opt.saw_tstamp && !tmp_opt.rcv_tsval)
+	{
 		/* Some OSes (unknown ones, but I see them on web server, which
 		 * contains information interesting only for windows'
 		 * users) do not send their stamp in SYN. It is easy case.
@@ -1345,7 +1349,9 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 		syn_flood_warning(skb);
 #endif
 		isn = cookie_v4_init_sequence(sk, skb, &req->mss);
-	} else if (!isn) {
+	} 
+	else if (!isn)
+	{
 		struct inet_peer *peer = NULL;
 
 		/* VJ's idea. We save last timestamp seen

@@ -92,17 +92,17 @@ int sysctl_tcp_nometrics_save __read_mostly;
 int sysctl_tcp_moderate_rcvbuf __read_mostly = 1;
 int sysctl_tcp_abc __read_mostly;
 
-#define FLAG_DATA		0x01 /* Incoming frame contained data.		*/
-#define FLAG_WIN_UPDATE		0x02 /* Incoming ACK was a window update.	*/
-#define FLAG_DATA_ACKED		0x04 /* This ACK acknowledged new data.		*/
-#define FLAG_RETRANS_DATA_ACKED	0x08 /* "" "" some of which was retransmitted.	*/
+#define FLAG_DATA			0x01 		/* Incoming frame contained data.		*/
+#define FLAG_WIN_UPDATE		0x02 		/* Incoming ACK was a window update.	*/
+#define FLAG_DATA_ACKED		0x04 		/* This ACK acknowledged new data.		*/
+#define FLAG_RETRANS_DATA_ACKED	0x08 	/* "" "" some of which was retransmitted.	*/
 #define FLAG_SYN_ACKED		0x10 /* This ACK acknowledged SYN.		*/
 #define FLAG_DATA_SACKED	0x20 /* New SACK.				*/
-#define FLAG_ECE		0x40 /* ECE in this ACK				*/
+#define FLAG_ECE			0x40 /* ECE in this ACK				*/
 #define FLAG_DATA_LOST		0x80 /* SACK detected data lossage.		*/
 #define FLAG_SLOWPATH		0x100 /* Do not skip RFC checks for window update.*/
 #define FLAG_ONLY_ORIG_SACKED	0x200 /* SACKs only non-rexmit sent before RTO */
-#define FLAG_SND_UNA_ADVANCED	0x400 /* Snd_una was changed (!= FLAG_DATA_ACKED) */
+#define FLAG_SND_UNA_ADVANCED	0x400 	/* Snd_una was changed (!= FLAG_DATA_ACKED) */
 #define FLAG_DSACKING_ACK	0x800 /* SACK blocks contained D-SACK info */
 #define FLAG_NONHEAD_RETRANS_ACKED	0x1000 /* Non-head rexmitted data was ACKed */
 
@@ -481,9 +481,7 @@ new_measure:
 static inline void tcp_rcv_rtt_measure_ts(struct sock *sk, const struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	if (tp->rx_opt.rcv_tsecr &&
-	    (TCP_SKB_CB(skb)->end_seq -
-	     TCP_SKB_CB(skb)->seq >= inet_csk(sk)->icsk_ack.rcv_mss))
+	if (tp->rx_opt.rcv_tsecr && (TCP_SKB_CB(skb)->end_seq - TCP_SKB_CB(skb)->seq >= inet_csk(sk)->icsk_ack.rcv_mss))
 		tcp_rcv_rtt_update(tp, tcp_time_stamp - tp->rx_opt.rcv_tsecr, 0);
 }
 
@@ -1238,8 +1236,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	unsigned char *ptr = (skb_transport_header(ack_skb) +
-			      TCP_SKB_CB(ack_skb)->sacked);
+	unsigned char *ptr = (skb_transport_header(ack_skb) + TCP_SKB_CB(ack_skb)->sacked);
 	struct tcp_sack_block_wire *sp = (struct tcp_sack_block_wire *)(ptr+2);
 	struct sk_buff *cached_skb;
 	int num_sacks = (ptr[1] - TCPOLEN_SACK_BASE)>>3;
@@ -1253,15 +1250,15 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	int first_sack_index;
 	int force_one_sack;
 
-	if (!tp->sacked_out) {
+	if (!tp->sacked_out)
+	{
 		if (WARN_ON(tp->fackets_out))
 			tp->fackets_out = 0;
 		tp->highest_sack = tp->snd_una;
 	}
 	prior_fackets = tp->fackets_out;
 
-	found_dup_sack = tcp_check_dsack(tp, ack_skb, sp,
-					 num_sacks, prior_snd_una);
+	found_dup_sack = tcp_check_dsack(tp, ack_skb, sp, num_sacks, prior_snd_una);
 	if (found_dup_sack)
 		flag |= FLAG_DSACKING_ACK;
 
@@ -1280,7 +1277,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	 * the first block then only apply that SACK block
 	 * and use retrans queue hinting otherwise slowpath */
 	force_one_sack = 1;
-	for (i = 0; i < num_sacks; i++) {
+	for (i = 0; i < num_sacks; i++) 
+	{
 		__be32 start_seq = sp[i].start_seq;
 		__be32 end_seq = sp[i].end_seq;
 
@@ -1913,7 +1911,7 @@ static inline int tcp_head_timedout(struct sock *sk)
  *
  * Counting packets in flight is pretty simple.
  *
- *	in_flight = packets_out + retrans_out - left_out
+ *	in_flight = packets_out + retrans_out - left_out 
  *
  *	packets_out is SND.NXT-SND.UNA counted in packets.
  *
@@ -1921,7 +1919,7 @@ static inline int tcp_head_timedout(struct sock *sk)
  *
  *	left_out is number of segments left network, but not ACKed yet.
  *
- *		left_out = sacked_out + lost_out
+ *		left_out = sacked_out + lost_out  
  *
  *     sacked_out: Packets, which arrived to receiver out of order
  *		   and hence not ACKed. With SACKs this number is simply
@@ -3070,9 +3068,9 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	u32 prior_snd_una = tp->snd_una;
-	u32 ack_seq = TCP_SKB_CB(skb)->seq;
-	u32 ack = TCP_SKB_CB(skb)->ack_seq;
+	u32 prior_snd_una = tp->snd_una;		/* 此ACK之前的snd_una */  	
+	u32 ack_seq = TCP_SKB_CB(skb)->seq;		/* 此ACK的开始序号 */
+	u32 ack = TCP_SKB_CB(skb)->ack_seq;		/* 此ACK的确认序号 */ 
 	u32 prior_in_flight;
 	u32 prior_fackets;
 	s32 seq_rtt;
@@ -3091,7 +3089,10 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 	if (after(ack, prior_snd_una))
 		flag |= FLAG_SND_UNA_ADVANCED;
 
-	if (sysctl_tcp_abc) {
+	//是否设置了tcp_abc，若有则我们不需要对每个ack确认都要拥塞避免，
+	//所以我们需要计算已经ack(确认)的字节数。 
+	if (sysctl_tcp_abc) 
+	{
 		if (icsk->icsk_ca_state < TCP_CA_CWR)
 			tp->bytes_acked += ack - prior_snd_una;
 		else if (icsk->icsk_ca_state == TCP_CA_Loss)
@@ -3102,7 +3103,8 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 	prior_fackets = tp->fackets_out;
 	prior_in_flight = tcp_packets_in_flight(tp);
 
-	if (!(flag&FLAG_SLOWPATH) && after(ack, prior_snd_una)) {
+	if (!(flag&FLAG_SLOWPATH) && after(ack, prior_snd_una))
+	{
 		/* Window is constant, pure forward advance.
 		 * No more checks are required.
 		 * Note, we use the fact that SND.UNA>=SND.WL2.
@@ -3114,7 +3116,9 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 		tcp_ca_event(sk, CA_EVENT_FAST_ACK);
 
 		NET_INC_STATS_BH(LINUX_MIB_TCPHPACKS);
-	} else {
+	}
+	else
+	{
 		if (ack_seq != TCP_SKB_CB(skb)->end_seq)
 			flag |= FLAG_DATA;
 		else
@@ -3205,7 +3209,8 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx,
 		int opcode=*ptr++;
 		int opsize;
 
-		switch (opcode) {
+		switch (opcode)
+		{
 			case TCPOPT_EOL:
 				return;
 			case TCPOPT_NOP:	/* Ref: RFC 793 section 3.1 */
@@ -3219,9 +3224,11 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx,
 					return;	/* don't parse partial options */
 				switch (opcode) {
 				case TCPOPT_MSS:
-					if (opsize==TCPOLEN_MSS && th->syn && !estab) {
+					if (opsize==TCPOLEN_MSS && th->syn && !estab) 
+					{
 						u16 in_mss = ntohs(get_unaligned((__be16 *)ptr));
-						if (in_mss) {
+						if (in_mss) 
+						{
 							if (opt_rx->user_mss && opt_rx->user_mss < in_mss)
 								in_mss = opt_rx->user_mss;
 							opt_rx->mss_clamp = in_mss;
@@ -5037,7 +5044,8 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb, struct tcphdr *t
 		if (th->rst)
 			goto discard;
 
-		if (th->syn) {
+		if (th->syn) 
+		{
 			if (icsk->icsk_af_ops->conn_request(sk, skb) < 0)
 				return 1;
 

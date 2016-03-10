@@ -26,7 +26,8 @@ struct sk_buff;
 struct dst_entry;
 struct proto;
 
-struct request_sock_ops {
+struct request_sock_ops 
+{
 	int		family;
 	int		obj_size;
 	struct kmem_cache	*slab;

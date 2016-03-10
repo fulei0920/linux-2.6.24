@@ -36,15 +36,13 @@ struct tcp_congestion_ops;
  * Pointers to address related TCP functions
  * (i.e. things that depend on the address family)
  */
-struct inet_connection_sock_af_ops {
+struct inet_connection_sock_af_ops 
+{
 	int	    (*queue_xmit)(struct sk_buff *skb, int ipfragok);
-	void	    (*send_check)(struct sock *sk, int len,
-				  struct sk_buff *skb);
+	void	    (*send_check)(struct sock *sk, int len, struct sk_buff *skb);
 	int	    (*rebuild_header)(struct sock *sk);
 	int	    (*conn_request)(struct sock *sk, struct sk_buff *skb);
-	struct sock *(*syn_recv_sock)(struct sock *sk, struct sk_buff *skb,
-				      struct request_sock *req,
-				      struct dst_entry *dst);
+	struct sock *(*syn_recv_sock)(struct sock *sk, struct sk_buff *skb, struct request_sock *req, struct dst_entry *dst);
 	int	    (*remember_stamp)(struct sock *sk);
 	u16	    net_header_len;
 	u16	    sockaddr_len;
@@ -108,14 +106,19 @@ struct inet_connection_sock
 	struct
 	{
 		__u8		  pending;	 /* ACK is pending			   */
-		__u8		  quick;	 /* Scheduled number of quick acks	   */
+		//Scheduled number of quick acks
+		//在快速发送确认模式中，可以快速发送ACK段的数量
+		__u8		  quick;	 
 		__u8		  pingpong;	 /* The session is interactive		   */
 		__u8		  blocked;	 /* Delayed ACK was blocked by socket lock */
 		__u32		  ato;		 /* Predicted tick of soft clock	   */
 		unsigned long	  timeout;	 /* Currently scheduled timeout		   */
 		__u32		  lrcvtime;	 /* timestamp of last received data packet */
 		__u16		  last_seg_size; /* Size of last incoming segment	   */
-		__u16		  rcv_mss;	 /* MSS used for delayed ACK decisions	   */ 
+		//MSS used for delayed ACK decisions
+		//由最近接收到的段计算出的对端发送MSS
+		//对端有效的发送MSS的估算值。显然不能超过本端接收的上限，icsk->icsk_ack.rcv_mss <= tp->advmss
+		__u16		  rcv_mss;	
 	} icsk_ack;
 	struct 
 	{

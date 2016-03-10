@@ -211,7 +211,14 @@ struct sock
 						sk_userlocks : 4;
 	unsigned char		sk_protocol;
 	unsigned short		sk_type;
-	int					sk_rcvbuf;					//size of receive buffer in bytes
+	//size of receive buffer in bytes
+	//接收缓冲区长度的上限
+	//接收缓存sk->sk_rcvbuf分为两部分：
+	//（1） network buffer，一般占3/4，这部分是协议能够使用的。
+	//（2）application buffer，一般占1/4。
+	//我们在计算连接可用接收缓存的时候，并不会使用整个的sk_rcvbuf，防止应用程序读取数据的速度比
+	//网络数据包到达的速度慢时，接收缓存被耗尽的情况。
+	int					sk_rcvbuf;					
 	socket_lock_t		sk_lock;
 	/*
 	 * The backlog queue is special, it is always used with
@@ -230,6 +237,7 @@ struct sock
 	atomic_t		sk_rmem_alloc;
 	atomic_t		sk_wmem_alloc;
 	atomic_t		sk_omem_alloc;
+	//发送缓冲区长度的上限
 	int			sk_sndbuf;
 	struct sk_buff_head	sk_receive_queue;
 	struct sk_buff_head	sk_write_queue;

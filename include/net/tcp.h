@@ -393,9 +393,7 @@ extern int			tcp_recvmsg(struct kiocb *iocb, struct sock *sk,
 					    size_t len, int nonblock, 
 					    int flags, int *addr_len);
 
-extern void			tcp_parse_options(struct sk_buff *skb,
-						  struct tcp_options_received *opt_rx,
-						  int estab);
+extern void			tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx, int estab);
 
 /*
  *	TCP v4 functions exported for the inet6 API
@@ -404,8 +402,7 @@ extern void			tcp_parse_options(struct sk_buff *skb,
 extern void		       	tcp_v4_send_check(struct sock *sk, int len,
 						  struct sk_buff *skb);
 
-extern int			tcp_v4_conn_request(struct sock *sk,
-						    struct sk_buff *skb);
+extern int			tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb);
 
 extern struct sock *		tcp_create_openreq_child(struct sock *sk,
 							 struct request_sock *req,
@@ -424,9 +421,7 @@ extern int			tcp_v4_connect(struct sock *sk,
 
 extern int			tcp_connect(struct sock *sk);
 
-extern struct sk_buff *		tcp_make_synack(struct sock *sk,
-						struct dst_entry *dst,
-						struct request_sock *req);
+extern struct sk_buff *		tcp_make_synack(struct sock *sk, struct dst_entry *dst, struct request_sock *req);
 
 extern int			tcp_disconnect(struct sock *sk, int flags);
 
@@ -557,6 +552,7 @@ extern u32	__tcp_select_window(struct sock *sk);
  */
 struct tcp_skb_cb 
 {
+	//主要是ip头信息
 	union
 	{
 		struct inet_skb_parm	h4;
@@ -565,28 +561,29 @@ struct tcp_skb_cb
 #endif
 	} header;	
 	/* For incoming frames		*/
-	__u32		seq;		/* Starting sequence number	*/ //起始序列编号
+	__u32		seq;		/* Starting sequence number  起始序列编号	*/
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
 	__u32		when;		/* used to compute rtt's	*/
-	__u8		flags;		/* TCP header flags.		*/ //TCP报头标志
+	__u8		flags;		/* TCP header flags. TCP报头标志		*/ 
 
 	/* NOTE: These must match up to the flags byte in a
 	 *       real TCP header.
 	 */
 #define TCPCB_FLAG_FIN		0x01
 #define TCPCB_FLAG_SYN		0x02
-#define TCPCB_FLAG_RST		0x04
-#define TCPCB_FLAG_PSH		0x08
-#define TCPCB_FLAG_ACK		0x10
-#define TCPCB_FLAG_URG		0x20
-#define TCPCB_FLAG_ECE		0x40
-#define TCPCB_FLAG_CWR		0x80
-
+#define TCPCB_FLAG_RST		0x04	// RST 重置
+#define TCPCB_FLAG_PSH		0x08	// PSH 接收方要立即处理  
+#define TCPCB_FLAG_ACK		0x10	// ACK ack段有效
+#define TCPCB_FLAG_URG		0x20	// URG 紧急指针
+#define TCPCB_FLAG_ECE		0x40	// ECE 有拥塞情况(可能是传播线路上的拥塞，例如路由器提供的信息) 
+#define TCPCB_FLAG_CWR		0x80	// CWR (发生某种拥塞，例如ICMP源抑制、本地设备拥塞) 
+	///SACK/FACK的状态flag或者是sack option的偏移(相对于tcp头的)
+	///当我们接收到正确的SACK后，这个域就会被初始化为sack所在的相对偏移(也就是相对于tcp头的偏移值，这样我们就能很容易得到sack option的位置).
 	__u8		sacked;		/* State flags for SACK/FACK.	*/
-#define TCPCB_SACKED_ACKED	0x01	/* SKB ACK'd by a SACK block	*/
+#define TCPCB_SACKED_ACKED	0x01		/* SKB ACK'd by a SACK block	*/
 #define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
-#define TCPCB_LOST		0x04	/* SKB is lost			*/
-#define TCPCB_TAGBITS		0x07	/* All tag bits			*/
+#define TCPCB_LOST		0x04			/* SKB is lost			*/
+#define TCPCB_TAGBITS		0x07		/* All tag bits			*/
 
 #define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
 #define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS)
@@ -747,6 +744,7 @@ static inline void tcp_enable_fack(struct tcp_sock *tp)
 	tp->rx_opt.sack_ok |= 2;
 }
 
+//表示离开网络(且未被确认)的数据包个数
 static inline unsigned int tcp_left_out(const struct tcp_sock *tp)
 {
 	return tp->sacked_out + tp->lost_out;
@@ -766,6 +764,7 @@ static inline unsigned int tcp_left_out(const struct tcp_sock *tp)
  *	"Packets left network, but not honestly ACKed yet" PLUS
  *	"Packets fast retransmitted"
  */
+//表示处于网络中(还未被确认)的数据包个数
 static inline unsigned int tcp_packets_in_flight(const struct tcp_sock *tp)
 {
 	return tp->packets_out + tp->retrans_out - tcp_left_out(tp);
@@ -1001,15 +1000,11 @@ static inline void tcp_sack_reset(struct tcp_options_received *rx_opt)
 }
 
 /* Determine a window scaling and initial window to offer. */
-extern void tcp_select_initial_window(int __space, __u32 mss,
-				      __u32 *rcv_wnd, __u32 *window_clamp,
-				      int wscale_ok, __u8 *rcv_wscale);
+extern void tcp_select_initial_window(int __space, __u32 mss, __u32 *rcv_wnd, __u32 *window_clamp, int wscale_ok, __u8 *rcv_wscale);
 
 static inline int tcp_win_from_space(int space)
 {
-	return sysctl_tcp_adv_win_scale<=0 ?
-		(space>>(-sysctl_tcp_adv_win_scale)) :
-		space - (space>>sysctl_tcp_adv_win_scale);
+	return sysctl_tcp_adv_win_scale<=0 ? (space>>(-sysctl_tcp_adv_win_scale)) : space - (space>>sysctl_tcp_adv_win_scale);
 }
 
 /* Note: caller must be prepared to deal with negative returns */ 

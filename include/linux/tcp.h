@@ -209,7 +209,8 @@ static inline unsigned int tcp_optlen(const struct sk_buff *skb)
 }
 
 /* This defines a selective acknowledgement block. */
-struct tcp_sack_block_wire {
+struct tcp_sack_block_wire 
+{
 	__be32	start_seq;
 	__be32	end_seq;
 };
@@ -231,13 +232,21 @@ struct tcp_options_received
 			dsack : 1,	/* D-SACK is scheduled			*/
 			wscale_ok : 1,	/* Wscale seen on SYN packet		*/
 			sack_ok : 4,	/* SACK seen on SYN packet		*/
-			snd_wscale : 4,	/* Window scaling received from sender	*/
-			rcv_wscale : 4;	/* Window scaling to send to receiver	*/
+			//Window scaling received from sender
+			//对端接收窗口扩大因子
+			snd_wscale : 4,	
+			//Window scaling to send to receiver
+			//本端接收窗口扩大因子
+			rcv_wscale : 4;	
 /*	SACKs data	*/
 	u8		eff_sacks;	/* Size of SACK array to send with next packet */
 	u8		num_sacks;	/* Number of SACK blocks		*/
-	u16		user_mss;  	/* mss requested by user in ioctl */
-	u16		mss_clamp;	/* Maximal mss, negotiated at connection setup */
+	//mss requested by user in ioctl
+	//用户通过TCP_MAXSEG选项设置的MSS上限，用于决定本端和对端的接收MSS上限
+	u16		user_mss;  	
+	//Maximal mss, negotiated at connection setup
+	//对端的能接收的MSS上限，min(tp->rx_opt.user_mss, 对端在建立连接时通告的MSS)
+	u16		mss_clamp;	
 };
 
 struct tcp_request_sock {
@@ -273,17 +282,28 @@ struct tcp_sock
  *	read the code and the spec side by side (and laugh ...)
  *	See RFC793 and RFC1122. The RFC writes these in capitals.
  */
- 	u32	rcv_nxt;	/* What we want to receive next 	*/
+ 	//What we want to receive next
+ 	//期待接收的下一个数据字节的序列号
+ 	u32	rcv_nxt;	/*  	*/
+	//Head of yet unread data
 	//应用程序还未读取的数据的起始序列号
-	u32	copied_seq;	/* Head of yet unread data		*/
-	u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
- 	u32	snd_nxt;	/* Next sequence we send		*/
+	u32	copied_seq;	
+	//rcv_nxt on last window update sent
+	//最早接收但未确认的段的序号，即当前接收窗口的左端
+	u32	rcv_wup;	
+	//Next sequence we send
+	//将要发送的下一个报文段的起始序列号
+ 	u32	snd_nxt;	
 
 	//滑动窗口中的发送但未被确认的第一个字节的序列号
  	u32	snd_una;	/* First byte we want an ack for	*/
  	u32	snd_sml;	/* Last byte of the most recently transmitted small packet */
-	u32	rcv_tstamp;	/* timestamp of last received ACK (for keepalives) */
-	u32	lsndtime;	/* timestamp of last sent data packet (for restart window) */
+	//timestamp of last received ACK (for keepalives)
+	//最近一次接收到ack的时间戳，主要用于keepalive
+	u32	rcv_tstamp;
+	//timestamp of last sent data packet (for restart window)
+	//最近一次发送数据包的时间戳
+	u32	lsndtime;	
 
 	/* Data for direct copy to user */
 	struct
@@ -307,14 +327,23 @@ struct tcp_sock
 #endif
 	} ucopy;
 
-	u32	snd_wl1;	/* Sequence for window update		*/
-	///对端通告的窗口大小(进过窗口扩大选项处理后的值)
-	u32	snd_wnd;	/* The window we expect to receive	*/
+	
+	//Sequence for window update
+	//记录更新发送窗口的ACK段序号
+	u32	snd_wl1;	
+	//The window we expect to receive
+	///对端通告的窗口大小(经过窗口扩大选项处理后的值)
+	u32	snd_wnd;	
 	u32	max_window;	/* Maximal window ever seen from peer	*/
-	u32	mss_cache;	/* Cached effective mss, not including SACKS */
-
-	u32	window_clamp;	/* Maximal window to advertise		*/
-	u32	rcv_ssthresh;	/* Current window clamp			*/
+	//Cached effective mss, not including SACKS
+	//本端当前有效的发送MSS。显然不能超过对端接收的上限，tp->mss_cache <= tp->mss_clamp。
+	u32	mss_cache;	
+	//Maximal window to advertise
+	//接收窗口的最大值，这个值也会动态调整
+	u32	window_clamp;
+	//Current window clamp
+	//当前接收窗口大小的阈值
+	u32	rcv_ssthresh;	
 
 	u32	frto_highmark;	/* snd_nxt when RTO occurred */
 	u8	reordering;	/* Packet reordering metric.		*/
@@ -328,10 +357,12 @@ struct tcp_sock
 	u32	mdev_max;	/* maximal mdev for the last rtt period	*/
 	u32	rttvar;		/* smoothed mdev_max			*/
 	u32	rtt_seq;	/* sequence number to update rttvar	*/
-	//snd.una后面的数据包
-	u32	packets_out;	/* Packets which are "in flight"	*/
-	//重传数据包计数
-	u32	retrans_out;	/* Retransmitted packets out		*/
+	//Packets which are "in flight"
+	//已发送且还没被ACK的数据包个数
+	u32	packets_out;	
+	//Retransmitted packets out
+	//重传且未未被ACK的数据包个数
+	u32	retrans_out;	
 /*
  *      Options received (usually on last packet, some only on SYN packets).
  */
@@ -359,8 +390,10 @@ struct tcp_sock
 	u32	snd_cwnd_stamp;
 
 	struct sk_buff_head	out_of_order_queue; /* Out of order segments go here */
+	//Current receiver window
+	//当前的接收窗口大小
 	///通告给对端的窗口的大小
- 	u32	rcv_wnd;	/* Current receiver window		*/
+ 	u32	rcv_wnd;	
 	u32	write_seq;	/* Tail(+1) of data held in tcp send buffer */
 	u32	pushed_seq;	/* Last pushed seq, required to talk to windows */
 
@@ -386,8 +419,10 @@ struct tcp_sock
 	int     retransmit_cnt_hint;
 
 	u32	lost_retrans_low;	/* Sent seq after any rxmit (lowest) */
-
-	u16	advmss;		/* Advertised MSS			*/
+	//Advertised MSS
+	//本端在建立连接时使用的MSS，是本端能接收的MSS上限。
+	//这是从路由缓存中获得的(dst->metrics[RTAX_ADVMSS - 1])，一般是1460
+	u16	advmss;		
 	//前一个snd_ssthresh得大小，也就是说每次改变snd_ssthresh前都要保存老的snd_ssthresh
 	u16	prior_ssthresh; /* ssthresh saved at recovery start	*/
 	//Packets lost by network. TCP has no explicit "loss notification" feedback from network (for now).
@@ -398,8 +433,9 @@ struct tcp_sock
 	//Packets, which arrived to receiver out of order and hence not ACKed. With SACKs this number is simply
 	//amount of SACKed data. Even without SACKs it is easy to give pretty reliable estimate of this number,
 	//counting duplicate ACKs.
-	//由SACK确认的数据包（当没有SACK时，duplicate ack 也使该计数+1）
-	u32	sacked_out;	/* SACK'd packets			*/
+	//SACK'd packets
+	//由SACK确认的数据包个数（当没有SACK时，duplicate ack 也使该计数+1）
+	u32	sacked_out;	
 	u32	fackets_out;	/* FACK'd packets			*/
 	//拥塞开始时，snd_nxt的大小
 	u32	high_seq;	/* snd_nxt at onset of congestion	*/

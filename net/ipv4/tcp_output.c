@@ -179,18 +179,21 @@ static inline void tcp_event_ack_sent(struct sock *sk, unsigned int pkts)
  * be a multiple of mss if possible. We assume here that mss >= 1.
  * This MUST be enforced by all callers.
  */
-void tcp_select_initial_window(int __space, __u32 mss,
-			       __u32 *rcv_wnd, __u32 *window_clamp,
-			       int wscale_ok, __u8 *rcv_wscale)
+void tcp_select_initial_window(int __space, __u32 mss, __u32 *rcv_wnd, __u32 *window_clamp, int wscale_ok, __u8 *rcv_wscale)
 {
+	//接收窗口大小不能为负
 	unsigned int space = (__space < 0 ? 0 : __space);
 
-	/* If no clamp set the clamp to the max possible scaled window */
+	// If no clamp set the clamp to the max possible scaled window 
+	// 如果接收窗口上限的初始值为0，则把它设成最大。 
 	if (*window_clamp == 0)
 		(*window_clamp) = (65535 << 14);
+
+	//接收窗口大小不能超过它的上限
 	space = min(*window_clamp, space);
 
-	/* Quantize space offering to a multiple of mss if possible. */
+	//Quantize space offering to a multiple of mss if possible. 
+	//接收窗口大小最好是mss的整数倍
 	if (space > mss)
 		space = (space / mss) * mss;
 
@@ -202,19 +205,25 @@ void tcp_select_initial_window(int __space, __u32 mss,
 	 * which we interpret as a sign the remote TCP is not
 	 * misinterpreting the window field as a signed quantity.
 	 */
+	//当协议使用有符号的接收窗口时，则接收窗口大小不能超过32767  
 	if (sysctl_tcp_workaround_signed_windows)
 		(*rcv_wnd) = min(space, MAX_TCP_WINDOW);
 	else
 		(*rcv_wnd) = space;
-
+	
+	//计算接收窗口扩大因子rcv_wscale，需要多大才能表示本连接的最大接收窗口大小？*/  
 	(*rcv_wscale) = 0;
-	if (wscale_ok) {
+	if (wscale_ok) 
+	{
 		/* Set window scaling on max possible window
 		 * See RFC1323 for an explanation of the limit to 14
 		 */
+		// sysctl_tcp_rmem[2]为接收缓冲区长度上限的最大值，用于调整sk_rcvbuf
+		// sysctl_rmem_max为系统接收窗口的最大大小
 		space = max_t(u32, sysctl_tcp_rmem[2], sysctl_rmem_max);
 		space = min_t(u32, space, *window_clamp);
-		while (space > 65535 && (*rcv_wscale) < 14) {
+		while (space > 65535 && (*rcv_wscale) < 14) 
+		{
 			space >>= 1;
 			(*rcv_wscale)++;
 		}
@@ -224,12 +233,15 @@ void tcp_select_initial_window(int __space, __u32 mss,
 	 * following RFC2414. Senders, not following this RFC,
 	 * will be satisfied with 2.
 	 */
-	if (mss > (1<<*rcv_wscale)) {
+	//接收窗口的初始值在这里确定，
+	if (mss > (1<<*rcv_wscale))
+	{
 		int init_cwnd = 4;
 		if (mss > 1460*3)
 			init_cwnd = 2;
 		else if (mss > 1460)
 			init_cwnd = 3;
+		
 		if (*rcv_wnd > init_cwnd*mss)
 			*rcv_wnd = init_cwnd*mss;
 	}
@@ -2175,8 +2187,7 @@ int tcp_send_synack(struct sock *sk)
 /*
  * Prepare a SYN-ACK.
  */
-struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
-				 struct request_sock *req)
+struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst, struct request_sock *req)
 {
 	struct inet_request_sock *ireq = inet_rsk(req);
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2227,17 +2238,15 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 	skb_shinfo(skb)->gso_type = 0;
 	th->seq = htonl(TCP_SKB_CB(skb)->seq);
 	th->ack_seq = htonl(tcp_rsk(req)->rcv_isn + 1);
-	if (req->rcv_wnd == 0) { /* ignored for retransmitted syns */
+	if (req->rcv_wnd == 0) 
+	{ 	/* ignored for retransmitted syns */
 		__u8 rcv_wscale;
 		/* Set this up on the first call only */
 		req->window_clamp = tp->window_clamp ? : dst_metric(dst, RTAX_WINDOW);
 		/* tcp_full_space because it is guaranteed to be the first packet */
-		tcp_select_initial_window(tcp_full_space(sk),
-			dst_metric(dst, RTAX_ADVMSS) - (ireq->tstamp_ok ? TCPOLEN_TSTAMP_ALIGNED : 0),
-			&req->rcv_wnd,
-			&req->window_clamp,
-			ireq->wscale_ok,
-			&rcv_wscale);
+		//dst_metric(dst, RTAX_ADVMSS) -- 路由缓存中的mss
+		tcp_select_initial_window(tcp_full_space(sk), dst_metric(dst, RTAX_ADVMSS) - (ireq->tstamp_ok ? TCPOLEN_TSTAMP_ALIGNED : 0),
+			&req->rcv_wnd, &req->window_clamp,  ireq->wscale_ok, &rcv_wscale);
 		ireq->rcv_wscale = rcv_wscale;
 	}
 
