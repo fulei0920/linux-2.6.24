@@ -59,7 +59,8 @@ struct ip_options
 
 #define optlength(opt) (sizeof(struct ip_options) + opt->optlen)
 
-struct inet_request_sock {
+struct inet_request_sock 
+{
 	struct request_sock	req;
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 	u16			inet6_rsk_offset;

@@ -80,9 +80,11 @@ void tcp_init_congestion_control(struct sock *sk)
 	struct tcp_congestion_ops *ca;
 
 	/* if no choice made yet assign the current value set as default */
-	if (icsk->icsk_ca_ops == &tcp_init_congestion_ops) {
+	if (icsk->icsk_ca_ops == &tcp_init_congestion_ops) 
+	{
 		rcu_read_lock();
-		list_for_each_entry_rcu(ca, &tcp_cong_list, list) {
+		list_for_each_entry_rcu(ca, &tcp_cong_list, list) 
+		{
 			if (try_module_get(ca->owner)) {
 				icsk->icsk_ca_ops = ca;
 				break;
@@ -293,6 +295,7 @@ void tcp_slow_start(struct tcp_sock *tp)
 	 * previously unacknowledged bytes ACKed by each incoming
 	 * acknowledgment, provided the increase is not more than L
 	 */
+	//ack的数据少于MSS
 	if (sysctl_tcp_abc && tp->bytes_acked < tp->mss_cache)
 		return;
 
@@ -304,12 +307,14 @@ void tcp_slow_start(struct tcp_sock *tp)
 	/* RFC3465: ABC
 	 * We MAY increase by 2 if discovered delayed ack
 	 */
+	/* 如果接收方启用了延时确认，此时收到的确认代表两个MSS数据报*/  
 	if (sysctl_tcp_abc > 1 && tp->bytes_acked >= 2*tp->mss_cache)
 		cnt <<= 1;
 	tp->bytes_acked = 0;
 
-	tp->snd_cwnd_cnt += cnt;
-	while (tp->snd_cwnd_cnt >= tp->snd_cwnd) {
+	tp->snd_cwnd_cnt += cnt;  /* 此时snd_cwnd_cnt等于snd_cwnd或2*snd_cwnd */
+	while (tp->snd_cwnd_cnt >= tp->snd_cwnd) 
+	{
 		tp->snd_cwnd_cnt -= tp->snd_cwnd;
 		if (tp->snd_cwnd < tp->snd_cwnd_clamp)
 			tp->snd_cwnd++;

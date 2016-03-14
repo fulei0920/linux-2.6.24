@@ -235,14 +235,19 @@ struct sock
 	struct xfrm_policy	*sk_policy[2];
 	rwlock_t		sk_dst_lock;
 	atomic_t		sk_rmem_alloc;
+	//提交给IP层的发送数据大小(累加skb->truesize)
 	atomic_t		sk_wmem_alloc;
 	atomic_t		sk_omem_alloc;
 	//发送缓冲区长度的上限
 	int			sk_sndbuf;
 	struct sk_buff_head	sk_receive_queue;
-	struct sk_buff_head	sk_write_queue;
+	struct sk_buff_head	sk_write_queue;  //发送队列
 	struct sk_buff_head	sk_async_wait_queue;
+	 /* 发送队列的总大小，包含发送队列中skb负荷大小， 
+     * 以及sk_buff、sk_shared_info结构体、协议头的额外开销。 
+     */  
 	int			sk_wmem_queued;
+	 ///* 预分配缓存大小，是已经分配但尚未使用的部分 */ 
 	int			sk_forward_alloc;
 	gfp_t			sk_allocation;
 	int			sk_route_caps;

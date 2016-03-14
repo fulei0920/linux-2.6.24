@@ -1422,9 +1422,7 @@ drop:
  * The three way handshake has completed - we got a valid synack -
  * now create the new socket.
  */
-struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
-				  struct request_sock *req,
-				  struct dst_entry *dst)
+struct sock *tcp_v4_syn_recv_sock(struct sock *sk, struct sk_buff *skb, struct request_sock *req, struct dst_entry *dst)
 {
 	struct inet_request_sock *ireq;
 	struct inet_sock *newinet;

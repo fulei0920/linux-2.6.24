@@ -215,22 +215,25 @@ struct tcp_sack_block_wire
 	__be32	end_seq;
 };
 
-struct tcp_sack_block {
-	u32	start_seq;
-	u32	end_seq;
+struct tcp_sack_block
+{
+	u32	start_seq;	//起始序号
+	u32	end_seq;	//结束序号
 };
 
 struct tcp_options_received 
 {
-/*	PAWS/RTTM data	*/
+	/*	PAWS/RTTM data	*/
 	long	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
 	u32		ts_recent;	/* Time stamp to echo next		*/
 	u32		rcv_tsval;	/* Time stamp value             	*/
 	u32		rcv_tsecr;	/* Time stamp echo reply        	*/
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
 			tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
+			//下一个发送段是否存在D-SACK
 			dsack : 1,	/* D-SACK is scheduled			*/
 			wscale_ok : 1,	/* Wscale seen on SYN packet		*/
+			//接收方是否支持SACK
 			sack_ok : 4,	/* SACK seen on SYN packet		*/
 			//Window scaling received from sender
 			//对端接收窗口扩大因子
@@ -238,7 +241,7 @@ struct tcp_options_received
 			//Window scaling to send to receiver
 			//本端接收窗口扩大因子
 			rcv_wscale : 4;	
-/*	SACKs data	*/
+	/*	SACKs data	*/
 	u8		eff_sacks;	/* Size of SACK array to send with next packet */
 	u8		num_sacks;	/* Number of SACK blocks		*/
 	//mss requested by user in ioctl
@@ -249,7 +252,8 @@ struct tcp_options_received
 	u16		mss_clamp;	
 };
 
-struct tcp_request_sock {
+struct tcp_request_sock
+{
 	struct inet_request_sock 	req;
 #ifdef CONFIG_TCP_MD5SIG
 	/* Only used by TCP MD5 Signature so far. */
@@ -327,22 +331,27 @@ struct tcp_sock
 #endif
 	} ucopy;
 
+	// /* snd_wll 记录发送窗口更新时，造成窗口更新的那个数据报的第一个序号。 
+  //* 它主要用于在下一次判断是否需要更新发送窗口。
 	
 	//Sequence for window update
 	//记录更新发送窗口的ACK段序号
+	//记录最后接收报文段的序号，用于更新发送窗口(snd_wnd)
 	u32	snd_wl1;	
 	//The window we expect to receive
 	///对端通告的窗口大小(经过窗口扩大选项处理后的值)
 	u32	snd_wnd;	
 	u32	max_window;	/* Maximal window ever seen from peer	*/
 	//Cached effective mss, not including SACKS
-	//本端当前有效的发送MSS。显然不能超过对端接收的上限，tp->mss_cache <= tp->mss_clamp。
+	//本端当前有效的发送MSS。显然不能超过对端接收的上限，tp->mss_cache <= tp->rx_opt.mss_clamp。
 	u32	mss_cache;	
 	//Maximal window to advertise
 	//接收窗口的最大值，这个值也会动态调整
 	u32	window_clamp;
 	//Current window clamp
 	//当前接收窗口大小的阈值
+	//On reception of data segment from the sender, this value is recalculated based on the size of the
+	//segment, and later on this value is used as upper limit on the receive window to be advertised.
 	u32	rcv_ssthresh;	
 
 	u32	frto_highmark;	/* snd_nxt when RTO occurred */
@@ -358,9 +367,11 @@ struct tcp_sock
 	u32	rttvar;		/* smoothed mdev_max			*/
 	u32	rtt_seq;	/* sequence number to update rttvar	*/
 	//Packets which are "in flight"
+	//the number of originally transmitted segments above snd.una
 	//已发送且还没被ACK的数据包个数
 	u32	packets_out;	
 	//Retransmitted packets out
+	//the number of retransmitted segments
 	//重传且未未被ACK的数据包个数
 	u32	retrans_out;	
 /*
@@ -379,6 +390,7 @@ struct tcp_sock
  	u32	snd_cwnd;		
 	//Linear increase counter		
 	//A counter used to slow down the rate of increase once we exceed slow start threshold.
+	//表示在当前的拥塞控制窗口中已经发送的数据段的个数
 	u32	snd_cwnd_cnt;	
 	//This is the maximum size that snd_cwnd can grow to.
 	//Do not allow snd_cwnd to grow above this
@@ -387,6 +399,7 @@ struct tcp_sock
 	//It is used to adjust snd_cwnd down when the link is limited by the application rather than the network.
 	u32	snd_cwnd_used;
 	//Timestamp for when congestion window last validated. 
+	//记录最后一次调整拥塞窗口的时间
 	u32	snd_cwnd_stamp;
 
 	struct sk_buff_head	out_of_order_queue; /* Out of order segments go here */
@@ -420,7 +433,7 @@ struct tcp_sock
 
 	u32	lost_retrans_low;	/* Sent seq after any rxmit (lowest) */
 	//Advertised MSS
-	//本端在建立连接时使用的MSS，是本端能接收的MSS上限。
+	//本端能接收的MSS上限, 建立连接时用来通告对端
 	//这是从路由缓存中获得的(dst->metrics[RTAX_ADVMSS - 1])，一般是1460
 	u16	advmss;		
 	//前一个snd_ssthresh得大小，也就是说每次改变snd_ssthresh前都要保存老的snd_ssthresh
@@ -428,16 +441,18 @@ struct tcp_sock
 	//Packets lost by network. TCP has no explicit "loss notification" feedback from network (for now).
 	//It means that this number can be only _guessed_. Actually, it is the heuristics to predict lossage that
 	//distinguishes different algorithms.
+	//an estimation of the number of segments lost in the network.
 	//网络中丢失的数据包的计数，是一个估计值，取决于具体实现
 	u32	lost_out;	
 	//Packets, which arrived to receiver out of order and hence not ACKed. With SACKs this number is simply
 	//amount of SACKed data. Even without SACKs it is easy to give pretty reliable estimate of this number,
 	//counting duplicate ACKs.
 	//SACK'd packets
+	//the number of segments acknowledged by SACK blocks.
 	//由SACK确认的数据包个数（当没有SACK时，duplicate ack 也使该计数+1）
 	u32	sacked_out;	
 	u32	fackets_out;	/* FACK'd packets			*/
-	//拥塞开始时，snd_nxt的大小
+	//发生拥塞时，snd_nxt的大小
 	u32	high_seq;	/* snd_nxt at onset of congestion	*/
 
 	u32	retrans_stamp;	/* Timestamp of the last retransmit,

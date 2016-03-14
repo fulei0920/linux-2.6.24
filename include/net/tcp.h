@@ -231,9 +231,13 @@ extern int sysctl_tcp_dma_copybreak;
 extern int sysctl_tcp_nometrics_save;
 extern int sysctl_tcp_moderate_rcvbuf;
 extern int sysctl_tcp_tso_win_divisor;
+//Controls Appropriate Byte Count defined in RFC3465. 
+//If set to 0 then does congestion avoid once per ACK. 1 is conservative value, 
+//and 2 is more aggressive. The default value is 1.
 extern int sysctl_tcp_abc;
 extern int sysctl_tcp_mtu_probing;
 extern int sysctl_tcp_base_mss;
+//在未启用窗口扩大因子选项时，是否使用初始值不超过32767的TCP窗口，默认值为0(不启用)
 extern int sysctl_tcp_workaround_signed_windows;
 extern int sysctl_tcp_slow_start_after_idle;
 extern int sysctl_tcp_max_ssthresh;
@@ -404,9 +408,7 @@ extern void		       	tcp_v4_send_check(struct sock *sk, int len,
 
 extern int			tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb);
 
-extern struct sock *		tcp_create_openreq_child(struct sock *sk,
-							 struct request_sock *req,
-							 struct sk_buff *skb);
+extern struct sock *		tcp_create_openreq_child(struct sock *sk, struct request_sock *req, struct sk_buff *skb);
 
 extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct sk_buff *skb,
@@ -520,6 +522,7 @@ static inline void tcp_fast_path_check(struct sock *sk)
  * Rcv_nxt can be after the window if our peer push more data
  * than the offered window.
  */
+//当前接收窗口的剩余大小
 static inline u32 tcp_receive_window(const struct tcp_sock *tp)
 {
 	s32 win = tp->rcv_wup + tp->rcv_wnd - tp->rcv_nxt;
@@ -561,9 +564,9 @@ struct tcp_skb_cb
 #endif
 	} header;	
 	/* For incoming frames		*/
-	__u32		seq;		/* Starting sequence number  起始序列编号	*/
-	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
-	__u32		when;		/* used to compute rtt's	*/
+	__u32		seq;		/* Starting sequence number.  起始序列号	*/
+	__u32		end_seq;	/* SEQ + FIN + SYN + datalen.  结束序列号*/
+	__u32		when;		/* used to compute rtt's.	*/
 	__u8		flags;		/* TCP header flags. TCP报头标志		*/ 
 
 	/* NOTE: These must match up to the flags byte in a
@@ -593,7 +596,7 @@ struct tcp_skb_cb
 #define TCPCB_AT_TAIL		(TCPCB_URG)
 
 	__u16		urg_ptr;	/* Valid w/URG flags is set.	*/
-	__u32		ack_seq;	/* Sequence number ACK'd	*/
+	__u32		ack_seq;	/* Sequence number ACK'd. ACK的序列号 */
 };
 
 #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
@@ -1008,12 +1011,13 @@ static inline int tcp_win_from_space(int space)
 }
 
 /* Note: caller must be prepared to deal with negative returns */ 
+//剩余接收缓存的3/4
 static inline int tcp_space(const struct sock *sk)
 {
-	return tcp_win_from_space(sk->sk_rcvbuf -
-				  atomic_read(&sk->sk_rmem_alloc));
+	return tcp_win_from_space(sk->sk_rcvbuf - atomic_read(&sk->sk_rmem_alloc));
 } 
 
+//最大的接收缓存的3/4
 static inline int tcp_full_space(const struct sock *sk)
 {
 	return tcp_win_from_space(sk->sk_rcvbuf); 

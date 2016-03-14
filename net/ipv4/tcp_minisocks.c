@@ -35,6 +35,7 @@
 #endif
 
 int sysctl_tcp_syncookies __read_mostly = SYNC_INIT;
+//
 int sysctl_tcp_abort_on_overflow __read_mostly;
 
 struct inet_timewait_death_row tcp_death_row = {
@@ -384,7 +385,8 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct request_sock *req,
 {
 	struct sock *newsk = inet_csk_clone(sk, req, GFP_ATOMIC);
 
-	if (newsk != NULL) {
+	if (newsk != NULL)
+	{
 		const struct inet_request_sock *ireq = inet_rsk(req);
 		struct tcp_request_sock *treq = tcp_rsk(req);
 		struct inet_connection_sock *newicsk = inet_csk(newsk);
@@ -689,7 +691,8 @@ struct sock *tcp_check_req(struct sock *sk,struct sk_buff *skb,
 		return child;
 
 	listen_overflow:
-		if (!sysctl_tcp_abort_on_overflow) {
+		if (!sysctl_tcp_abort_on_overflow) 
+		{
 			inet_rsk(req)->acked = 1;
 			return NULL;
 		}

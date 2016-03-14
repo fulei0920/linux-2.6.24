@@ -1131,8 +1131,7 @@ unsigned long sock_i_ino(struct sock *sk)
 /*
  * Allocate a skb from the socket's send buffer.
  */
-struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force,
-			     gfp_t priority)
+struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, gfp_t priority)
 {
 	if (force || atomic_read(&sk->sk_wmem_alloc) < sk->sk_sndbuf) {
 		struct sk_buff * skb = alloc_skb(size, priority);

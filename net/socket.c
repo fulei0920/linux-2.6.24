@@ -1360,6 +1360,7 @@ asmlinkage long sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
  *	ready for listening.
  */
 
+//服务端侦听时，允许每个套接口连接队列长度的最大值。 默认为128
 int sysctl_somaxconn __read_mostly = SOMAXCONN;
 
 asmlinkage long sys_listen(int fd, int backlog)
@@ -1368,7 +1369,8 @@ asmlinkage long sys_listen(int fd, int backlog)
 	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
-	if (sock) {
+	if (sock)
+	{
 		if ((unsigned)backlog > sysctl_somaxconn)
 			backlog = sysctl_somaxconn;
 
