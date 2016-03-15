@@ -73,7 +73,8 @@ struct inet_ehash_bucket {
  * users logged onto your box, isn't it nice to know that new data
  * ports are created in O(1) time?  I thought so. ;-)	-DaveM
  */
-struct inet_bind_bucket {
+struct inet_bind_bucket 
+{
 	unsigned short		port;
 	signed short		fastreuse;
 	struct hlist_node	node;

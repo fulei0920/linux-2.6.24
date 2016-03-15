@@ -114,24 +114,34 @@ int sysctl_tcp_nometrics_save __read_mostly;
 //标示是否启动自动调节接受缓冲区大小。默认值为1(true)
 //如果启用，TCP会自动地调整接收缓冲区的大小，以此来进行流量控制，在满足缓冲区大小不能超过系统参数sysctl_tcp_rmem[2](high)的条件下，提供最大的吞吐量
 int sysctl_tcp_moderate_rcvbuf __read_mostly = 1;
-//标识是否启用ABC。
+//标识是否启用ABC(Appropriate Byte Count)。
 // 0(默认值) -- 禁用ABC，每次收到ACK都会增长拥塞窗口
 // 1		   -- 累计确认了一个全尺寸的段之后才会递增拥塞窗口
 // 2         -- 如果接收方启用了延时确认，累计确认了两个全尺寸的段之后才会递增拥塞窗口
 //ABC定义在RFC3465中，是根据接收到的ACK确认的字节数来控制拥塞窗口增长的一种方法
 int sysctl_tcp_abc __read_mostly;
 
+//接收到的ACK段是负荷数据携带的
 #define FLAG_DATA			0x01 		/* Incoming frame contained data.		*/
+//接收到的ACK段更新了发送窗口
 #define FLAG_WIN_UPDATE		0x02 		/* Incoming ACK was a window update.	*/
+//接收到的ACK段确认了新的数据
 #define FLAG_DATA_ACKED		0x04 		/* This ACK acknowledged new data.		*/
+//表示此段已重传过
 #define FLAG_RETRANS_DATA_ACKED	0x08 	/* "" "" some of which was retransmitted.	*/
+//接收的ACK段确认了SYN段
 #define FLAG_SYN_ACKED		0x10 /* This ACK acknowledged SYN.		*/
+//是新的SACK
 #define FLAG_DATA_SACKED	0x20 /* New SACK.				*/
+//在ACK段中存在ECE标志，显示收到拥塞通知
 #define FLAG_ECE			0x40 /* ECE in this ACK				*/
+//由SACK标识的数据已丢失
 #define FLAG_DATA_LOST		0x80 /* SACK detected data lossage.		*/
+//在慢速路径中处理的
 #define FLAG_SLOWPATH		0x100 /* Do not skip RFC checks for window update.*/
 #define FLAG_ONLY_ORIG_SACKED	0x200 /* SACKs only non-rexmit sent before RTO */
 #define FLAG_SND_UNA_ADVANCED	0x400 	/* Snd_una was changed (!= FLAG_DATA_ACKED) */
+//
 #define FLAG_DSACKING_ACK	0x800 /* SACK blocks contained D-SACK info */
 #define FLAG_NONHEAD_RETRANS_ACKED	0x1000 /* Non-head rexmitted data was ACKed */
 
@@ -1111,8 +1121,7 @@ static void tcp_update_reordering(struct sock *sk, const int metric,
  * the exact amount is rather hard to quantify. However, tp->max_window can
  * be used as an exaggerated estimate.
  */
-static int tcp_is_sackblock_valid(struct tcp_sock *tp, int is_dsack,
-				  u32 start_seq, u32 end_seq)
+static int tcp_is_sackblock_valid(struct tcp_sock *tp, int is_dsack, u32 start_seq, u32 end_seq)
 {
 	/* Too far in future, or reversed (interpretation is ambiguous) */
 	if (after(end_seq, tp->snd_nxt) || !before(start_seq, end_seq))
@@ -1207,24 +1216,27 @@ static int tcp_mark_lost_retrans(struct sock *sk, u32 received_upto)
 	return flag;
 }
 
-static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb,
-			   struct tcp_sack_block_wire *sp, int num_sacks,
-			   u32 prior_snd_una)
+static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb, struct tcp_sack_block_wire *sp, int num_sacks, u32 prior_snd_una)
 {
 	u32 start_seq_0 = ntohl(get_unaligned(&sp[0].start_seq));
 	u32 end_seq_0 = ntohl(get_unaligned(&sp[0].end_seq));
 	int dup_sack = 0;
 
-	if (before(start_seq_0, TCP_SKB_CB(ack_skb)->ack_seq)) {
+	//如果第一个SACK块的起始序号小于它的确认序号，说明此SACK块包含了确认过的数据
+	if (before(start_seq_0, TCP_SKB_CB(ack_skb)->ack_seq))
+	{
 		dup_sack = 1;
 		tcp_dsack_seen(tp);
 		NET_INC_STATS_BH(LINUX_MIB_TCPDSACKRECV);
-	} else if (num_sacks > 1) {
+	} 
+	else if (num_sacks > 1) 
+	{
 		u32 end_seq_1 = ntohl(get_unaligned(&sp[1].end_seq));
 		u32 start_seq_1 = ntohl(get_unaligned(&sp[1].start_seq));
-
-		if (!after(end_seq_0, end_seq_1) &&
-		    !before(start_seq_0, start_seq_1)) {
+		
+		//如果第一个SACK块包含在第二个SACK块中，也说明第一个SACK块是重复的，即DSACK
+		if (!after(end_seq_0, end_seq_1) && !before(start_seq_0, start_seq_1)) 
+		{
 			dup_sack = 1;
 			tcp_dsack_seen(tp);
 			NET_INC_STATS_BH(LINUX_MIB_TCPDSACKOFORECV);
@@ -1232,9 +1244,8 @@ static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb,
 	}
 
 	/* D-SACK for already forgotten data... Do dumb counting. */
-	if (dup_sack &&
-	    !after(end_seq_0, prior_snd_una) &&
-	    after(end_seq_0, tp->undo_marker))
+	//DSACK、undo_marker < end_seq <= prior_snd_una
+	if (dup_sack && !after(end_seq_0, prior_snd_una) && after(end_seq_0, tp->undo_marker))
 		tp->undo_retrans--;
 
 	return dup_sack;
@@ -1277,12 +1288,12 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	unsigned char *ptr = (skb_transport_header(ack_skb) + TCP_SKB_CB(ack_skb)->sacked);
-	struct tcp_sack_block_wire *sp = (struct tcp_sack_block_wire *)(ptr+2);
+	unsigned char *ptr = (skb_transport_header(ack_skb) + TCP_SKB_CB(ack_skb)->sacked); //sack选项的起始地址, TCP_SKB_CB(ack_skb)->sacked为sack选项在TCP首部的偏移
+	struct tcp_sack_block_wire *sp = (struct tcp_sack_block_wire *)(ptr+2);  //sack block的起始地址
 	struct sk_buff *cached_skb;
-	int num_sacks = (ptr[1] - TCPOLEN_SACK_BASE)>>3;
+	int num_sacks = (ptr[1] - TCPOLEN_SACK_BASE)>>3; //sack block的个数
 	int reord = tp->packets_out;
-	int prior_fackets;
+	int prior_fackets;		//上次的fackets_out
 	u32 highest_sack_end_seq = tp->lost_retrans_low;
 	int flag = 0;
 	int found_dup_sack = 0;
@@ -1291,14 +1302,15 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	int first_sack_index;
 	int force_one_sack;
 
-	if (!tp->sacked_out)
+	if (!tp->sacked_out)			//如果之前没有SACKed的数据
 	{
 		if (WARN_ON(tp->fackets_out))
-			tp->fackets_out = 0;
-		tp->highest_sack = tp->snd_una;
+			tp->fackets_out = 0;    	//FACK是根据最新的SACK来计算的，也要为0 
+		tp->highest_sack = tp->snd_una;	// tp->highest_sack置为发送队列的第一个数据包，因为没有SACK块
 	}
 	prior_fackets = tp->fackets_out;
 
+	/* 检查第一个SACK块是否为DSACK */  
 	found_dup_sack = tcp_check_dsack(tp, ack_skb, sp, num_sacks, prior_snd_una);
 	if (found_dup_sack)
 		flag |= FLAG_DSACKING_ACK;
@@ -1307,9 +1319,11 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	 * account more or less fresh ones, they can
 	 * contain valid SACK info.
 	 */
+	//如果SACK信息是很早以前的，直接丢弃
 	if (before(TCP_SKB_CB(ack_skb)->ack_seq, prior_snd_una - tp->max_window))
 		return 0;
 
+	//如果我们并没有发送数据到网络中，错误
 	if (!tp->packets_out)
 		goto out;
 
@@ -1317,16 +1331,25 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	 * if the only SACK change is the increase of the end_seq of
 	 * the first block then only apply that SACK block
 	 * and use retrans queue hinting otherwise slowpath */
+
+	/* 判断是否进入快速路径。 
+     * 对第一个块：只要求起始序号相同 
+     * 对于非第一个块：要求起始序号和结束序号都相同 
+     * 也就是说，快速路径指的是只有第一个块的结束序号增加的情况 
+     */  
 	force_one_sack = 1;
 	for (i = 0; i < num_sacks; i++) 
 	{
 		__be32 start_seq = sp[i].start_seq;
 		__be32 end_seq = sp[i].end_seq;
 
-		if (i == 0) {
+		if (i == 0)
+		{
 			if (tp->recv_sack_cache[i].start_seq != start_seq)
 				force_one_sack = 0;
-		} else {
+		} 
+		else 
+		{
 			if ((tp->recv_sack_cache[i].start_seq != start_seq) ||
 			    (tp->recv_sack_cache[i].end_seq != end_seq))
 				force_one_sack = 0;
@@ -1335,23 +1358,29 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		tp->recv_sack_cache[i].end_seq = end_seq;
 	}
 	/* Clear the rest of the cache sack blocks so they won't match mistakenly. */
-	for (; i < ARRAY_SIZE(tp->recv_sack_cache); i++) {
+	for (; i < ARRAY_SIZE(tp->recv_sack_cache); i++) 
+	{
 		tp->recv_sack_cache[i].start_seq = 0;
 		tp->recv_sack_cache[i].end_seq = 0;
 	}
 
 	first_sack_index = 0;
 	if (force_one_sack)
-		num_sacks = 1;
-	else {
+	{
+		num_sacks = 1;	 /* 快速路径时只有第一个块有变化，处理第一个块即可 */ 
+	}
+	else 
+	{
 		int j;
-		tp->fastpath_skb_hint = NULL;
+		tp->fastpath_skb_hint = NULL; /* 上次第一个SACK块的结束处，也是这次快速路径的开始点，慢速路径中重置了 */  
 
 		/* order SACK blocks to allow in order walk of the retrans queue */
-		for (i = num_sacks-1; i > 0; i--) {
-			for (j = 0; j < i; j++){
-				if (after(ntohl(sp[j].start_seq),
-					  ntohl(sp[j+1].start_seq))){
+		for (i = num_sacks-1; i > 0; i--) 
+		{
+			for (j = 0; j < i; j++)
+			{
+				if (after(ntohl(sp[j].start_seq), ntohl(sp[j+1].start_seq)))
+				{
 					struct tcp_sack_block_wire tmp;
 
 					tmp = sp[j];
@@ -1370,31 +1399,37 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	/* Use SACK fastpath hint if valid */
 	cached_skb = tp->fastpath_skb_hint;
 	cached_fack_count = tp->fastpath_cnt_hint;
-	if (!cached_skb) {
+	if (!cached_skb)
+	{
 		cached_skb = tcp_write_queue_head(sk);
 		cached_fack_count = 0;
 	}
 
-	for (i = 0; i < num_sacks; i++) {
+	for (i = 0; i < num_sacks; i++) 
+	{
 		struct sk_buff *skb;
 		__u32 start_seq = ntohl(sp->start_seq);
 		__u32 end_seq = ntohl(sp->end_seq);
 		int fack_count;
-		int dup_sack = (found_dup_sack && (i == first_sack_index));
-		int next_dup = (found_dup_sack && (i+1 == first_sack_index));
+		int dup_sack = (found_dup_sack && (i == first_sack_index));  	//当前SACK是否为DSACK块
+		int next_dup = (found_dup_sack && (i+1 == first_sack_index));	//当前SACK的下一个SACK是否为DSACK块
 
 		sp++;
 
-		if (!tcp_is_sackblock_valid(tp, dup_sack, start_seq, end_seq)) {
-			if (dup_sack) {
+		/* 检查这个SACK块是否为合法的 */  
+		if (!tcp_is_sackblock_valid(tp, dup_sack, start_seq, end_seq)) 
+		{
+			if (dup_sack) 
+			{
 				if (!tp->undo_marker)
 					NET_INC_STATS_BH(LINUX_MIB_TCPDSACKIGNOREDNOUNDO);
 				else
 					NET_INC_STATS_BH(LINUX_MIB_TCPDSACKIGNOREDOLD);
-			} else {
+			} 
+			else 
+			{
 				/* Don't count olds caused by ACK reordering */
-				if ((TCP_SKB_CB(ack_skb)->ack_seq != tp->snd_una) &&
-				    !after(end_seq, tp->snd_una))
+				if ((TCP_SKB_CB(ack_skb)->ack_seq != tp->snd_una) && !after(end_seq, tp->snd_una))
 					continue;
 				NET_INC_STATS_BH(LINUX_MIB_TCPSACKDISCARD);
 			}
@@ -1405,10 +1440,14 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		fack_count = cached_fack_count;
 
 		/* Event "B" in the comment above. */
+		/* high_seq是进入Recovery或Loss时的snd_nxt，如果high_seq被SACK了，那么很可能有数据包 
+          * 丢失了，不然就可以ACK掉high_seq返回Open态了。
+		*/
 		if (after(end_seq, tp->high_seq))
 			flag |= FLAG_DATA_LOST;
 
-		tcp_for_write_queue_from(skb, sk) {
+		tcp_for_write_queue_from(skb, sk)
+		{
 			int in_sack = 0;
 			u8 sacked;
 
@@ -1417,7 +1456,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 
 			cached_skb = skb;
 			cached_fack_count = fack_count;
-			if (i == first_sack_index) {
+			if (i == first_sack_index) 
+			{
 				tp->fastpath_skb_hint = skb;
 				tp->fastpath_cnt_hint = fack_count;
 			}
@@ -2945,6 +2985,7 @@ static int tcp_ack_update_window(struct sock *sk, struct sk_buff *skb, u32 ack, 
 	int flag = 0;
 	u32 nwin = ntohs(tcp_hdr(skb)->window);
 
+	//在SYN或SYN/ACK报文本身的窗口字段始终不做任何的扩大
 	if (likely(!tcp_hdr(skb)->syn))
 		nwin <<= tp->rx_opt.snd_wscale;
 
@@ -3174,7 +3215,8 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 		else 
 			NET_INC_STATS_BH(LINUX_MIB_TCPPUREACKS);
 
-		flag |= tcp_ack_update_window(sk, skb, ack, ack_seq);  // /* 更新发送窗口*/  
+		//更新发送窗口
+		flag |= tcp_ack_update_window(sk, skb, ack, ack_seq);  
 
 		/* 根据SACK选项标志重传队列中SKB的记分牌状态*/  
 		if (TCP_SKB_CB(skb)->sacked)  
@@ -3733,7 +3775,6 @@ new_sack:
 }
 
 /* RCV.NXT advances, some SACKs should be eaten. */
-
 static void tcp_sack_remove(struct tcp_sock *tp)
 {
 	struct tcp_sack_block *sp = &tp->selective_acks[0];
@@ -3741,15 +3782,18 @@ static void tcp_sack_remove(struct tcp_sock *tp)
 	int this_sack;
 
 	/* Empty ofo queue, hence, all the SACKs are eaten. Clear. */
-	if (skb_queue_empty(&tp->out_of_order_queue)) {
+	if (skb_queue_empty(&tp->out_of_order_queue)) 
+	{
 		tp->rx_opt.num_sacks = 0;
 		tp->rx_opt.eff_sacks = tp->rx_opt.dsack;
 		return;
 	}
 
-	for (this_sack = 0; this_sack < num_sacks; ) {
+	for (this_sack = 0; this_sack < num_sacks; ) 
+	{
 		/* Check if the start of the sack is covered by RCV.NXT. */
-		if (!before(tp->rcv_nxt, sp->start_seq)) {
+		if (!before(tp->rcv_nxt, sp->start_seq)) 
+		{
 			int i;
 
 			/* RCV.NXT must cover all the block! */
@@ -5041,12 +5085,14 @@ discard:
 		 */
 		tcp_set_state(sk, TCP_SYN_RECV);
 
-		if (tp->rx_opt.saw_tstamp) {
+		if (tp->rx_opt.saw_tstamp)
+		{
 			tp->rx_opt.tstamp_ok = 1;
 			tcp_store_ts_recent(tp);
-			tp->tcp_header_len =
-				sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
-		} else {
+			tp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+		}
+		else 
+		{
 			tp->tcp_header_len = sizeof(struct tcphdr);
 		}
 

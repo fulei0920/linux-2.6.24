@@ -83,10 +83,15 @@ struct inet_connection_sock
 {
 	/* inet_sock has to be the first member! */
 	struct inet_sock	  icsk_inet;
+	//当TCP传输层接收到客户端的连接请求后，会创建一个客户端套接字
+	//存放到icsk_accept_queue容器中，等待应用程序调用accept()进行读取
 	struct request_sock_queue icsk_accept_queue;
+	//指向与之绑定的本地端口信息，在绑定过程中被设置
 	struct inet_bind_bucket	  *icsk_bind_hash;
-	unsigned long		  icsk_timeout;			///指定当前icsk_retransmit_timer定时器的超时时刻
+	///指定当前icsk_retransmit_timer定时器的超时时刻
+	unsigned long		  icsk_timeout;			
  	struct timer_list	  icsk_retransmit_timer;
+	//用于延时发送ACK段的定时器
  	struct timer_list	  icsk_delack_timer;
 	__u32			  icsk_rto;
 	__u32			  icsk_pmtu_cookie;
@@ -95,20 +100,36 @@ struct inet_connection_sock
 	unsigned int		  (*icsk_sync_mss)(struct sock *sk, u32 pmtu);
 	//表示拥塞控制的状态
 	__u8			  icsk_ca_state;
-	//表明已经重传了的次数
+	//记录超时重传的次数
 	__u8			  icsk_retransmits;	
 	///指定当前icsk_retransmit_timer定时器类型是ICSK_TIME_RETRANS还是ICSK_TIME_PROBE0
 	__u8			  icsk_pending;		
 	__u8			  icsk_backoff;
+	//在建立TCP连接时最多允许重试发送SYN或SYN+ACK段的次数，参见TCP_SYNCNT选项和sysctl_tcp_synack_retries系统参数
 	__u8			  icsk_syn_retries;
+	//持续定时器或保活定时器周期性发送出去但未被确认的TCP段的次数，在收到ACK之后清零
 	__u8			  icsk_probes_out;
+	//IP首部中选项部分长度
 	__u16			  icsk_ext_hdr_len;
+	//延时确认控制数据块
 	struct
 	{
+		//标识当前需要发送确认的紧急程度和状态: inet_csk_ack_state_t
+		//在数据从内核空间复制到用户空间时会检测该状态，如果需要则立即发送确认
+		//在计算rcv_mss时，会根据情况调整此状态
+		//由于pending是按位存储的，因此多个状态可以同时存在
 		__u8		  pending;	 /* ACK is pending			   */
 		//Scheduled number of quick acks
-		//在快速发送确认模式中，可以快速发送ACK段的数量
-		__u8		  quick;	 
+		//在快速发送确认模式中，可以快速发送ACK段的数量。
+		//与pingpong一同作为判断是否在快速发送确认模式下的条件，
+		//如果要延时发送确认，则必须在延时发送确认模式下
+		__u8		  quick;	
+		//标识启用或禁用快速确认模式。通过TCP_QUICKACK选项可以设置其值，
+		//0--不延时ACK段的发送，而是进行快速发送
+		//1--将会延时发送ACK
+		//在快速确认模式下，会立即发送ACK。整个TCP处理过程中，如果需要还会进入到
+		//正常模式运行，也就是说，这个标志的设置不是永久性的，而只是在当时启用/禁用
+		//快速确认模式，在这之后，根据延时确认超时、数据传输等因素，有可能会再次进入或离开快速确认模式。
 		__u8		  pingpong;	 /* The session is interactive		   */
 		__u8		  blocked;	 /* Delayed ACK was blocked by socket lock */
 		__u32		  ato;		 /* Predicted tick of soft clock	   */
@@ -154,10 +175,16 @@ extern struct sock *inet_csk_clone(struct sock *sk,
 				   const struct request_sock *req,
 				   const gfp_t priority);
 
-enum inet_csk_ack_state_t {
+enum inet_csk_ack_state_t
+{
+	//有ACK需要发送，是立即发送还是延时发送，还需要看其他标志，
+	//也是能否发送确认的前提。在接收到有负荷的TCP段后，会设置该标志
 	ICSK_ACK_SCHED	= 1,
+	//延时发送ACK定时器已经启动
 	ICSK_ACK_TIMER  = 2,
+	//只要有ACK需要发送，并且pingpong为0时，ACK可以立即发送
 	ICSK_ACK_PUSHED = 4,
+	//只要有ACK需要发送，都可以立即发送，无论是否处于快速发送模式
 	ICSK_ACK_PUSHED2 = 8
 };
 

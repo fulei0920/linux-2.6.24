@@ -231,9 +231,6 @@ extern int sysctl_tcp_dma_copybreak;
 extern int sysctl_tcp_nometrics_save;
 extern int sysctl_tcp_moderate_rcvbuf;
 extern int sysctl_tcp_tso_win_divisor;
-//Controls Appropriate Byte Count defined in RFC3465. 
-//If set to 0 then does congestion avoid once per ACK. 1 is conservative value, 
-//and 2 is more aggressive. The default value is 1.
 extern int sysctl_tcp_abc;
 extern int sysctl_tcp_mtu_probing;
 extern int sysctl_tcp_base_mss;
@@ -338,8 +335,12 @@ static inline void tcp_clear_options(struct tcp_options_received *rx_opt)
  	rx_opt->tstamp_ok = rx_opt->sack_ok = rx_opt->wscale_ok = rx_opt->snd_wscale = 0;
 }
 
+//标识本端是否支持显示拥塞通知。
+//在建立TCP连接的过程中根据sysctl_tcp_ecn系统参数和TCP首部中的ECE、CWR标志位设置
 #define	TCP_ECN_OK		1
+//标识发送方由于收到显示拥塞通知而进入拥塞状态
 #define	TCP_ECN_QUEUE_CWR	2
+//标识接收到的段经历了拥塞
 #define	TCP_ECN_DEMAND_CWR	4
 
 static __inline__ void
@@ -596,7 +597,7 @@ struct tcp_skb_cb
 #define TCPCB_AT_TAIL		(TCPCB_URG)
 
 	__u16		urg_ptr;	/* Valid w/URG flags is set.	*/
-	__u32		ack_seq;	/* Sequence number ACK'd. ACK的序列号 */
+	__u32		ack_seq;	/* Sequence number ACK'd. ACK的确认序列号 */
 };
 
 #define TCP_SKB_CB(__skb)	((struct tcp_skb_cb *)&((__skb)->cb[0]))
@@ -604,6 +605,7 @@ struct tcp_skb_cb
 /* Due to TSO, an SKB can be composed of multiple actual
  * packets.  To keep these tracked properly, we use this.
  */
+//
 static inline int tcp_skb_pcount(const struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->gso_segs;

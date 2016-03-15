@@ -151,8 +151,7 @@ static void tcp_cwnd_restart(struct sock *sk, struct dst_entry *dst)
 	tp->snd_cwnd_used = 0;
 }
 
-static void tcp_event_data_sent(struct tcp_sock *tp,
-				struct sk_buff *skb, struct sock *sk)
+static void tcp_event_data_sent(struct tcp_sock *tp, struct sk_buff *skb, struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	const u32 now = tcp_time_stamp;
