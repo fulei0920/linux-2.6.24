@@ -25,10 +25,19 @@
 
 int sysctl_tcp_syn_retries __read_mostly = TCP_SYN_RETRIES;
 int sysctl_tcp_synack_retries __read_mostly = TCP_SYNACK_RETRIES;
+//在TCP保活打开的情况下，最后一次数据交换到TCP发送第一个保活探测消息的时间，即允许的持续空闲时间。默认值为7200s(2h)
 int sysctl_tcp_keepalive_time __read_mostly = TCP_KEEPALIVE_TIME;
+//TCP发送保活探测消息以确定连接是否断开的次数。默认为9次
+//注意:只有设置了SO_KEEPALIVE套接字选项后才会发送保活探测消息
 int sysctl_tcp_keepalive_probes __read_mostly = TCP_KEEPALIVE_PROBES;
+//保活探测消息的发送频率。默认为75s
+//发送频率sysctl_tcp_keepalive_probes乘以发送次数sysctl_tcp_keepalive_probes，就得到了从开始探测直到放弃探测确定连接断开的时间，大约为11min
 int sysctl_tcp_keepalive_intvl __read_mostly = TCP_KEEPALIVE_INTVL;
+//当重传次数超过此值时，可能遇到了黑洞，因此要检测PMTU是否有效。并清除缓存在传输控制块中的目的路由缓存项，在下次重传时会重新进行路由选择。
+//默认值3(次)，根据RTO的值大约在3s--8min
 int sysctl_tcp_retries1 __read_mostly = TCP_RETR1;
+//持续定时器周期性发送TCP段或超时重传时，在确定断开TCP连接之前，最多尝试的次数。
+//默认值15(次)，根据RTO的值大约相当于13-30min。RFC1122规定，该值必须大于100s
 int sysctl_tcp_retries2 __read_mostly = TCP_RETR2;
 int sysctl_tcp_orphan_retries __read_mostly;
 

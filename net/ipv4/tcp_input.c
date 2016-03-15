@@ -72,12 +72,25 @@
 #include <asm/unaligned.h>
 #include <net/netdma.h>
 
+//标识是否启用TCP时间戳选项。默认值为1(true)。
+//时间戳可以使连接的两端很方便的测量RTT，同时还可以避免序号的回绕，因此为了实现更好的性能应该启用该选项。参见RFC1323
 int sysctl_tcp_timestamps __read_mostly = 1;
+//标识是否启用TCP窗口扩大因子选项。默认值为1(true)。
+//通常情况下TCP允许窗口尺寸为65535B，但对于带宽很高的网络而言这个值可能还是太小，此时如果启用了该选项，可使TCP滑动窗口
+//大小增大数个数量级，从而提供数据传输的能力，参见RFC1323
 int sysctl_tcp_window_scaling __read_mostly = 1;
+//标识是否启用选择性确认SACKS选项。默认值为1(true)。
+//SACK可以用来查找特定的丢失的段，因此有助于快速恢复状态。同时，启用SACK，接收方可以有选择地应答乱序接收到的段，
+//可帮助发送方确定丢失的段，进而发送方只需发送丢失的段，以提高性能。
+//对于广域网通信来说应该启用该选项，但是这会增加CPU的负荷，参见RFC2018
+
 int sysctl_tcp_sack __read_mostly = 1;
 //标志是否启用FACK拥塞避免与快速重传功能。
 //注意，只有当启用sysctl_tcp_sack时，该系统参数才有效
 int sysctl_tcp_fack __read_mostly = 1;
+//在不支持SACK时，为由于连接接收到重复确认而进入快速回复阶段的重复确认数阈值。
+//在支持SACK时，在没有确定丢失包的情况下，是TCP流中可以重排的数据段数。
+//默认值为3(个)。如果降低此值，可能会导致网络性能变差。
 int sysctl_tcp_reordering __read_mostly = TCP_FASTRETRANS_THRESH;
 //标识是否启用TCP的显示拥塞通知功能。
 int sysctl_tcp_ecn __read_mostly;
@@ -93,15 +106,18 @@ int sysctl_tcp_stdurg __read_mostly;
 int sysctl_tcp_rfc1337 __read_mostly;
 int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
 //标识是否启用F-RTO
+//启用F-RTO，会启用优化后的TCP重传算法。这在无线环境中特别有效，
+//因为通常是由于无线电干扰而不是由于路由器拥塞导致随机丢包
 int sysctl_tcp_frto __read_mostly = 2;
 int sysctl_tcp_frto_response __read_mostly;
 int sysctl_tcp_nometrics_save __read_mostly;
-
+//标示是否启动自动调节接受缓冲区大小。默认值为1(true)
+//如果启用，TCP会自动地调整接收缓冲区的大小，以此来进行流量控制，在满足缓冲区大小不能超过系统参数sysctl_tcp_rmem[2](high)的条件下，提供最大的吞吐量
 int sysctl_tcp_moderate_rcvbuf __read_mostly = 1;
-//标识是否启用ABC
-// 0
-// 1
-// 2
+//标识是否启用ABC。
+// 0(默认值) -- 禁用ABC，每次收到ACK都会增长拥塞窗口
+// 1		   -- 累计确认了一个全尺寸的段之后才会递增拥塞窗口
+// 2         -- 如果接收方启用了延时确认，累计确认了两个全尺寸的段之后才会递增拥塞窗口
 //ABC定义在RFC3465中，是根据接收到的ACK确认的字节数来控制拥塞窗口增长的一种方法
 int sysctl_tcp_abc __read_mostly;
 
@@ -536,8 +552,8 @@ void tcp_rcv_space_adjust(struct sock *sk)
 
 		tp->rcvq_space.space = space;
 
-		if (sysctl_tcp_moderate_rcvbuf &&
-		    !(sk->sk_userlocks & SOCK_RCVBUF_LOCK)) {
+		if (sysctl_tcp_moderate_rcvbuf && !(sk->sk_userlocks & SOCK_RCVBUF_LOCK)) 
+		{
 			int new_clamp = space;
 
 			/* Receive space grows, normalize in order to
@@ -830,9 +846,9 @@ void tcp_update_metrics(struct sock *sk)
 				dst->metrics[RTAX_SSTHRESH-1] = tp->snd_ssthresh;
 		}
 
-		if (!dst_metric_locked(dst, RTAX_REORDERING)) {
-			if (dst->metrics[RTAX_REORDERING-1] < tp->reordering &&
-			    tp->reordering != sysctl_tcp_reordering)
+		if (!dst_metric_locked(dst, RTAX_REORDERING)) 
+		{
+			if (dst->metrics[RTAX_REORDERING-1] < tp->reordering && tp->reordering != sysctl_tcp_reordering)
 				dst->metrics[RTAX_REORDERING-1] = tp->reordering;
 		}
 	}
@@ -2429,8 +2445,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	int is_dupack = !(flag&(FLAG_SND_UNA_ADVANCED|FLAG_NOT_DUP));
-	int do_lost = is_dupack || ((flag&FLAG_DATA_SACKED) &&
-				    (tp->fackets_out > tp->reordering));
+	int do_lost = is_dupack || ((flag&FLAG_DATA_SACKED) && (tp->fackets_out > tp->reordering));
 
 	/* Some technical things:
 	 * 1. Reno does not count dupacks (sacked_out) automatically. */
@@ -3261,7 +3276,8 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx,
 	ptr = (unsigned char *)(th + 1);
 	opt_rx->saw_tstamp = 0;
 
-	while (length > 0) {
+	while (length > 0) 
+	{
 		int opcode=*ptr++;
 		int opsize;
 
@@ -3278,7 +3294,8 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx,
 					return;
 				if (opsize > length)
 					return;	/* don't parse partial options */
-				switch (opcode) {
+				switch (opcode) 
+				{
 				case TCPOPT_MSS:
 					if (opsize==TCPOLEN_MSS && th->syn && !estab) 
 					{
@@ -3293,7 +3310,8 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx,
 					break;
 				case TCPOPT_WINDOW:
 					if (opsize==TCPOLEN_WINDOW && th->syn && !estab)
-						if (sysctl_tcp_window_scaling) {
+						if (sysctl_tcp_window_scaling) 
+						{
 							__u8 snd_wscale = *(__u8 *) ptr;
 							opt_rx->wscale_ok = 1;
 							if (snd_wscale > 14) {
@@ -3351,17 +3369,18 @@ void tcp_parse_options(struct sk_buff *skb, struct tcp_options_received *opt_rx,
 /* Fast parse options. This hopes to only see timestamps.
  * If it is wrong it falls back on tcp_parse_options().
  */
-static int tcp_fast_parse_options(struct sk_buff *skb, struct tcphdr *th,
-				  struct tcp_sock *tp)
+static int tcp_fast_parse_options(struct sk_buff *skb, struct tcphdr *th, struct tcp_sock *tp)
 {
-	if (th->doff == sizeof(struct tcphdr)>>2) {
+	if (th->doff == sizeof(struct tcphdr)>>2) 
+	{
 		tp->rx_opt.saw_tstamp = 0;
 		return 0;
-	} else if (tp->rx_opt.tstamp_ok &&
-		   th->doff == (sizeof(struct tcphdr)>>2)+(TCPOLEN_TSTAMP_ALIGNED>>2)) {
+	}
+	else if (tp->rx_opt.tstamp_ok && th->doff == (sizeof(struct tcphdr)>>2)+(TCPOLEN_TSTAMP_ALIGNED>>2)) 
+	{
 		__be32 *ptr = (__be32 *)(th + 1);
-		if (*ptr == htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
-				  | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP)) {
+		if (*ptr == htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP))
+		{
 			tp->rx_opt.saw_tstamp = 1;
 			++ptr;
 			tp->rx_opt.rcv_tsval = ntohl(*ptr);

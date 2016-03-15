@@ -156,12 +156,12 @@ extern void tcp_time_wait(struct sock *sk, int state, int timeo);
  *	TCP option
  */
  
-#define TCPOPT_NOP		1	/* Padding */
-#define TCPOPT_EOL		0	/* End of options */
-#define TCPOPT_MSS		2	/* Segment size negotiating */
+#define TCPOPT_NOP			1	/* Padding */
+#define TCPOPT_EOL			0	/* End of options */
+#define TCPOPT_MSS			2	/* Segment size negotiating */
 #define TCPOPT_WINDOW		3	/* Window scaling */
-#define TCPOPT_SACK_PERM        4       /* SACK Permitted */
-#define TCPOPT_SACK             5       /* SACK Block */
+#define TCPOPT_SACK_PERM    4   /* SACK Permitted */
+#define TCPOPT_SACK         5   /* SACK Block */
 #define TCPOPT_TIMESTAMP	8	/* Better RTT estimations/PAWS */
 #define TCPOPT_MD5SIG		19	/* MD5 Signature (RFC2385) */
 
@@ -1023,9 +1023,7 @@ static inline int tcp_full_space(const struct sock *sk)
 	return tcp_win_from_space(sk->sk_rcvbuf); 
 }
 
-static inline void tcp_openreq_init(struct request_sock *req,
-				    struct tcp_options_received *rx_opt,
-				    struct sk_buff *skb)
+static inline void tcp_openreq_init(struct request_sock *req, struct tcp_options_received *rx_opt, struct sk_buff *skb)
 {
 	struct inet_request_sock *ireq = inet_rsk(req);
 

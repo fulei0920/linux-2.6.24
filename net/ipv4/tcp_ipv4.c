@@ -2453,7 +2453,8 @@ void tcp4_proc_exit(void)
 
 DEFINE_PROTO_INUSE(tcp)
 
-struct proto tcp_prot = {
+struct proto tcp_prot = 
+{
 	.name			= "TCP",
 	.owner			= THIS_MODULE,
 	.close			= tcp_close,

@@ -32,6 +32,8 @@
  * (<=32Mb of memory) and to 1024 on normal or better ones (>=256Mb).
  * Note : Dont forget somaxconn that may limit backlog too.
  */
+ 
+//系统可同时存在未完成三次握手的SYN请求的最大数目。默认值:对超过128MB内存的系统是1024，对小内存系统则是128
 int sysctl_max_syn_backlog = 256;
 
 int reqsk_queue_alloc(struct request_sock_queue *queue,

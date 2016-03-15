@@ -247,8 +247,7 @@ struct tcp_options_received
 	//mss requested by user in ioctl
 	//用户通过TCP_MAXSEG选项设置的MSS上限，用于决定本端和对端的接收MSS上限
 	u16		user_mss;  	
-	//Maximal mss, negotiated at connection setup
-	//对端的能接收的MSS上限，min(tp->rx_opt.user_mss, 对端在建立连接时通告的MSS)
+	//对端的能接收的MSS上限，连接建立阶段协商值min(tp->rx_opt.user_mss, 对端在建立连接时通告的MSS)
 	u16		mss_clamp;	
 };
 
@@ -299,10 +298,11 @@ struct tcp_sock
 	//将要发送的下一个报文段的起始序列号
  	u32	snd_nxt;	
 
-	//滑动窗口中的发送但未被确认的第一个字节的序列号
- 	u32	snd_una;	/* First byte we want an ack for	*/
+	//发送窗口中的发送但未被确认的第一个字节的序列号
+ 	u32	snd_una;	
+	//最近发送的小包(小于MSS的段)的最后一个字节的序号，在成功发送段后，
+	//如果报文小于MSS，即更新该字段，主要用来判断是否启用Nagle算法
  	u32	snd_sml;	/* Last byte of the most recently transmitted small packet */
-	//timestamp of last received ACK (for keepalives)
 	//最近一次接收到ack的时间戳，主要用于keepalive
 	u32	rcv_tstamp;
 	//timestamp of last sent data packet (for restart window)
@@ -330,16 +330,11 @@ struct tcp_sock
 		dma_cookie_t		dma_cookie;
 #endif
 	} ucopy;
-
-	// /* snd_wll 记录发送窗口更新时，造成窗口更新的那个数据报的第一个序号。 
-  //* 它主要用于在下一次判断是否需要更新发送窗口。
 	
-	//Sequence for window update
-	//记录更新发送窗口的ACK段序号
-	//记录最后接收报文段的序号，用于更新发送窗口(snd_wnd)
+	//记录更新发送窗口的那个ACK段序号，用于下一次判断是否需要更新窗口。
+	//如果后续收到的ACK段的序号大于snd_wl1，则说明需更新窗口，否则无需更新。
 	u32	snd_wl1;	
-	//The window we expect to receive
-	///对端通告的窗口大小(经过窗口扩大选项处理后的值)
+	///接收方(对端)通告的窗口大小(经过窗口扩大选项处理后的值)，即发送方(本端)发送窗口大小
 	u32	snd_wnd;	
 	u32	max_window;	/* Maximal window ever seen from peer	*/
 	//Cached effective mss, not including SACKS
@@ -348,14 +343,20 @@ struct tcp_sock
 	//Maximal window to advertise
 	//接收窗口的最大值，这个值也会动态调整
 	u32	window_clamp;
-	//Current window clamp
 	//当前接收窗口大小的阈值
 	//On reception of data segment from the sender, this value is recalculated based on the size of the
 	//segment, and later on this value is used as upper limit on the receive window to be advertised.
 	u32	rcv_ssthresh;	
-
+	//当超时重传发生时，在启用F-RTO情况下，用来保存待发送的下一个TCP段的序号snd_nxt。
+	//在tcp_process_frto()中处理F-RTO时使用。
 	u32	frto_highmark;	/* snd_nxt when RTO occurred */
+	//在不支持SACK时，为由于连接接受到重复确认而进入快速回复阶段的重复确认数阈值。
+	//在支持SACK时，在没有确定丢失包的情况下，是TCP流中可以重排序的数据段数
+	//由相关路由缓存项中的reordering度量值或系统参数sysctl_tcp_reordering进行初始化，
+	//更新时会同时更新到目的路由缓存项的reordering度量值中。
 	u8	reordering;	/* Packet reordering metric.		*/
+	//在传送超时后，记录在启用F-RTO算法时接收到ACK段的数目。传送超时后，如果启用了F-RTO算法，则进入F-RTO处理阶段，
+	//在此阶段，如果连续接收到3个对新数据确认ACK段，则恢复到正常模式下。非零时，也表示在F-RTO处理阶段
 	u8	frto_counter;	/* Number of new acks after RTO */
 	u8	nonagle;	/* Disable Nagle algorithm?             */
 	u8	keepalive_probes; /* num of allowed keep alive probes	*/

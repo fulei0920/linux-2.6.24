@@ -269,6 +269,7 @@
 #include <asm/uaccess.h>
 #include <asm/ioctls.h>
 
+//对于本端断开的套接字连接，确定TCP保持在FIN_WAIT_2状态的时间。默认值为60s
 int sysctl_tcp_fin_timeout __read_mostly = TCP_FIN_TIMEOUT;
 
 DEFINE_SNMP_STAT(struct tcp_mib, tcp_statistics) __read_mostly;
@@ -277,8 +278,17 @@ atomic_t tcp_orphan_count = ATOMIC_INIT(0);
 
 EXPORT_SYMBOL_GPL(tcp_orphan_count);
 
+//3个整数分别对应于low、pressure、high。初始值在系统启动时根据系统内存数量计算得到。
+//low -- 当TCP使用的内存页面低于该数值时，TCP不考虑释放内存，且分配总能成功
+//pressure -- 
+//high --
 int sysctl_tcp_mem[3] __read_mostly;
 int sysctl_tcp_wmem[3] __read_mostly;
+//3个整数，默认值为:4096, 87380, 174760, 分别对应于min，default，max
+//min -- 接收队列中报文数据总长度(sock结构的sk_rmem_alloc)的上限
+//default -- 接收缓冲区长度上限的初始值，用来初始化sock结构的成员sk_rcvbuf
+//default -- 接收缓冲区长度上限的最大值，用来调整sock结构的成员sk_rcvbuf
+
 int sysctl_tcp_rmem[3] __read_mostly;
 
 EXPORT_SYMBOL(sysctl_tcp_mem);

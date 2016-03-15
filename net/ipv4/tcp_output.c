@@ -54,7 +54,10 @@ int sysctl_tcp_workaround_signed_windows __read_mostly = 0;
  * which are too large can cause TCP streams to be bursty.
  */
 int sysctl_tcp_tso_win_divisor __read_mostly = 3;
-
+//标识是否启用路径MTU发现，默认值为0
+//0 -- 禁止
+//1-- 通常禁止，但会在探测到ICMP黑洞时启用
+//2-- 启用，用tcp_base_mss()来初始化MSS
 int sysctl_tcp_mtu_probing __read_mostly = 0;
 //如果启用路径MTU发现，则用它来作为较小值初始化MSS，默认值512
 int sysctl_tcp_base_mss __read_mostly = 512;
@@ -1872,18 +1875,19 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	int err;
 
 	/* Inconslusive MTU probe */
-	if (icsk->icsk_mtup.probe_size) {
+	if (icsk->icsk_mtup.probe_size) 
+	{
 		icsk->icsk_mtup.probe_size = 0;
 	}
 
 	/* Do not sent more than we queued. 1/4 is reserved for possible
 	 * copying overhead: fragmentation, tunneling, mangling etc.
 	 */
-	if (atomic_read(&sk->sk_wmem_alloc) >
-	    min(sk->sk_wmem_queued + (sk->sk_wmem_queued >> 2), sk->sk_sndbuf))
+	if (atomic_read(&sk->sk_wmem_alloc) > min(sk->sk_wmem_queued + (sk->sk_wmem_queued >> 2), sk->sk_sndbuf))
 		return -EAGAIN;
 
-	if (before(TCP_SKB_CB(skb)->seq, tp->snd_una)) {
+	if (before(TCP_SKB_CB(skb)->seq, tp->snd_una)) 
+	{
 		if (before(TCP_SKB_CB(skb)->end_seq, tp->snd_una))
 			BUG();
 		if (tcp_trim_head(sk, skb, tp->snd_una - TCP_SKB_CB(skb)->seq))

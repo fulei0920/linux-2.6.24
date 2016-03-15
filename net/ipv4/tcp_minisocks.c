@@ -35,7 +35,9 @@
 #endif
 
 int sysctl_tcp_syncookies __read_mostly = SYNC_INIT;
-//
+//表示当前进程太忙而不能接受新的连接时，是否主动向对方发送RST段。默认值为0(false).
+//该选项可能会影响使用，只有在确信进程真的不能完成连接请求时才改打开此选项。
+//通常用于apache这类服务，这样可以很快让客户端终止连接，让服务程序有机会处理已有连接。
 int sysctl_tcp_abort_on_overflow __read_mostly;
 
 struct inet_timewait_death_row tcp_death_row = {
