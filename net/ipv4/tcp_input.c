@@ -1244,7 +1244,8 @@ static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb, struct 
 	}
 
 	/* D-SACK for already forgotten data... Do dumb counting. */
-	//DSACK、undo_marker < end_seq <= prior_snd_una
+	//DSACK、undo_marker < end_seq <= prior_snd_una
+	//判断dsack的数据是否已经被ack完全确认过了，如果确认过了，我们就需要更新undo_retrans域，这个域表示重传的数据段的个数。 
 	if (dup_sack && !after(end_seq_0, prior_snd_una) && after(end_seq_0, tp->undo_marker))
 		tp->undo_retrans--;
 
@@ -1257,17 +1258,15 @@ static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb, struct 
  * which may fail and creates some hassle (caller must handle error case
  * returns).
  */
-static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb,
-				 u32 start_seq, u32 end_seq)
+static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb, u32 start_seq, u32 end_seq)
 {
 	int in_sack, err;
 	unsigned int pkt_len;
 
-	in_sack = !after(start_seq, TCP_SKB_CB(skb)->seq) &&
-		  !before(end_seq, TCP_SKB_CB(skb)->end_seq);
+	in_sack = !after(start_seq, TCP_SKB_CB(skb)->seq) && !before(end_seq, TCP_SKB_CB(skb)->end_seq);
 
-	if (tcp_skb_pcount(skb) > 1 && !in_sack &&
-	    after(TCP_SKB_CB(skb)->end_seq, start_seq)) {
+	if (tcp_skb_pcount(skb) > 1 && !in_sack && after(TCP_SKB_CB(skb)->end_seq, start_seq))
+	{
 
 		in_sack = !after(start_seq, TCP_SKB_CB(skb)->seq);
 
@@ -1283,6 +1282,19 @@ static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb,
 	return in_sack;
 }
 
+/*
+*1. New ACK (+SACK) arrives. (tcp_sacktag_write_queue()) 
+* 2. Retransmission. (tcp_retransmit_skb(), tcp_xmit_retransmit_queue()) 
+* 3. Loss detection event of one of three flavors: 
+* 	A. Scoreboard estimator decided the packet is lost. 
+		* 	 A'. Reno "three dupacks" marks head of queue lost. 
+		*	 A''. Its FACK modfication, head until snd.fack is lost. 
+*	B. SACK arrives sacking data transmitted after never retransmitted 
+*		 hole was sent out. 
+* 	C. SACK arrives sacking SND.NXT at the moment, when the 
+* 	 segment was retransmitted. 
+*4. D-SACK added new rule: D-SACK changes any tag to S.
+*/
 static int
 tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_una)
 {
@@ -1443,6 +1455,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		/* high_seq是进入Recovery或Loss时的snd_nxt，如果high_seq被SACK了，那么很可能有数据包 
           * 丢失了，不然就可以ACK掉high_seq返回Open态了。
 		*/
+		//如果sack段的结束序列号大于将要发送的最大序列号，这个情况说明我们可能有数据丢失。因此设置丢失标记。这里可以看到也就是上面所说的事件B到达
 		if (after(end_seq, tp->high_seq))
 			flag |= FLAG_DATA_LOST;
 
@@ -1471,11 +1484,13 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			dup_sack = (found_dup_sack && (i == first_sack_index));
 
 			/* Due to sorting DSACK may reside within this SACK block! */
-			if (next_dup) {
+			if (next_dup) 
+			{
 				u32 dup_start = ntohl(sp->start_seq);
 				u32 dup_end = ntohl(sp->end_seq);
 
-				if (before(TCP_SKB_CB(skb)->seq, dup_end)) {
+				if (before(TCP_SKB_CB(skb)->seq, dup_end))
+				{
 					in_sack = tcp_match_skb_to_sack(sk, skb, dup_start, dup_end);
 					if (in_sack > 0)
 						dup_sack = 1;
@@ -1491,16 +1506,15 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			sacked = TCP_SKB_CB(skb)->sacked;
 
 			/* Account D-SACK for retransmitted packet. */
-			if ((dup_sack && in_sack) &&
-			    (sacked & TCPCB_RETRANS) &&
-			    after(TCP_SKB_CB(skb)->end_seq, tp->undo_marker))
+			if ((dup_sack && in_sack) && (sacked & TCPCB_RETRANS) && after(TCP_SKB_CB(skb)->end_seq, tp->undo_marker))
 				tp->undo_retrans--;
 
 			/* The frame is ACKed. */
-			if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una)) {
-				if (sacked&TCPCB_RETRANS) {
-					if ((dup_sack && in_sack) &&
-					    (sacked&TCPCB_SACKED_ACKED))
+			if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una))
+			{
+				if (sacked & TCPCB_RETRANS) 
+				{
+					if ((dup_sack && in_sack) && (sacked&TCPCB_SACKED_ACKED))
 						reord = min(fack_count, reord);
 				}
 
@@ -1509,18 +1523,22 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 				continue;
 			}
 
-			if (!in_sack) {
+			if (!in_sack) 
+			{
 				fack_count += tcp_skb_pcount(skb);
 				continue;
 			}
 
-			if (!(sacked&TCPCB_SACKED_ACKED)) {
-				if (sacked & TCPCB_SACKED_RETRANS) {
+			if (!(sacked & TCPCB_SACKED_ACKED)) 
+			{
+				if (sacked & TCPCB_SACKED_RETRANS) 
+				{
 					/* If the segment is not tagged as lost,
 					 * we do not clear RETRANS, believing
 					 * that retransmission is still in flight.
 					 */
-					if (sacked & TCPCB_LOST) {
+					if (sacked & TCPCB_LOST)
+					{
 						TCP_SKB_CB(skb)->sacked &= ~(TCPCB_LOST|TCPCB_SACKED_RETRANS);
 						tp->lost_out -= tcp_skb_pcount(skb);
 						tp->retrans_out -= tcp_skb_pcount(skb);
@@ -1528,8 +1546,11 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 						/* clear lost hint */
 						tp->retransmit_skb_hint = NULL;
 					}
-				} else {
-					if (!(sacked & TCPCB_RETRANS)) {
+				} 
+				else 
+				{
+					if (!(sacked & TCPCB_RETRANS))
+					{
 						/* New sack for not retransmitted frame,
 						 * which was in hole. It is reordering.
 						 */
@@ -1541,7 +1562,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 							flag |= FLAG_ONLY_ORIG_SACKED;
 					}
 
-					if (sacked & TCPCB_LOST) {
+					if (sacked & TCPCB_LOST)
+					{
 						TCP_SKB_CB(skb)->sacked &= ~TCPCB_LOST;
 						tp->lost_out -= tcp_skb_pcount(skb);
 
@@ -1558,7 +1580,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 				if (fack_count > tp->fackets_out)
 					tp->fackets_out = fack_count;
 
-				if (after(TCP_SKB_CB(skb)->seq, tp->highest_sack)) {
+				if (after(TCP_SKB_CB(skb)->seq, tp->highest_sack)) 
+				{
 					tp->highest_sack = TCP_SKB_CB(skb)->seq;
 					highest_sack_end_seq = TCP_SKB_CB(skb)->end_seq;
 				}

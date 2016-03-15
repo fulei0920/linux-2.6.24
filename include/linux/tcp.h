@@ -458,7 +458,7 @@ struct tcp_sock
 
 	//存储接收到的SACK选项的信息
 	struct tcp_sack_block_wire recv_sack_cache[4];
-
+	///被SACK确认的所有报文段中最大的起始序列号
 	u32	highest_sack;	/* Start seq of globally highest revd SACK(validity guaranteed only if sacked_out > 0) */
 
 	/* from STCP, retrans queue hinting */
@@ -531,6 +531,7 @@ struct tcp_sock
 	//在使用F-RTO算法进行发送超时处理，或进入Recovery进行重传，或进入Loss开始慢启动时，
 	//记录当时snd_una，标记重传的起始点。它是检测是否可以进行拥塞撤销的条件之一，
 	//一般在完成拥塞撤销操作或进入拥塞控制Loss状态状态后清零。
+	///表示发生重传时的snd_una
 	u32	undo_marker;	/* tracking retrans started here. */
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。

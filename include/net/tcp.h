@@ -584,19 +584,24 @@ struct tcp_skb_cb
 	///SACK/FACK的状态flag或者是sack option的偏移(相对于tcp头的)
 	///当我们接收到正确的SACK后，这个域就会被初始化为sack所在的相对偏移(也就是相对于tcp头的偏移值，这样我们就能很容易得到sack option的位置).
 	__u8		sacked;		/* State flags for SACK/FACK.	*/
-#define TCPCB_SACKED_ACKED	0x01		/* SKB ACK'd by a SACK block	*/
+//该段通过SACK被确认
+#define TCPCB_SACKED_ACKED	0x01		
+//改段已经重传
 #define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
+//该段在传输过程中已丢失
 #define TCPCB_LOST		0x04			/* SKB is lost			*/
 #define TCPCB_TAGBITS		0x07		/* All tag bits			*/
 
 #define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
 #define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS)
 
+//该段中存在外带数据
 #define TCPCB_URG		0x20	/* Urgent pointer advanced here	*/
 
 #define TCPCB_AT_TAIL		(TCPCB_URG)
 
 	__u16		urg_ptr;	/* Valid w/URG flags is set.	*/
+	//接收到的TCP段首部中的确认序号(ACK)
 	__u32		ack_seq;	/* Sequence number ACK'd. ACK的确认序列号 */
 };
 
@@ -1258,8 +1263,7 @@ static inline struct sk_buff *tcp_write_queue_next(struct sock *sk, struct sk_bu
 		     skb = skb->next)
 
 #define tcp_for_write_queue_from(skb, sk)				\
-		for (; (skb != (struct sk_buff *)&(sk)->sk_write_queue);\
-		     skb = skb->next)
+		for (; (skb != (struct sk_buff *)&(sk)->sk_write_queue); skb = skb->next)
 
 static inline struct sk_buff *tcp_send_head(struct sock *sk)
 {

@@ -209,10 +209,12 @@ struct sock
 	unsigned char		sk_shutdown : 2,
 						sk_no_check : 2,			// checksum on rcv/xmit/none? 
 						sk_userlocks : 4;
+	//当前域中套接字所属的协议
 	unsigned char		sk_protocol;
+	//所属套接字类型。比如SOCK_STREAM等
 	unsigned short		sk_type;
 	//size of receive buffer in bytes
-	//接收缓冲区长度的上限
+	//接收缓冲区大小的上限，参考SO_RCVBUF选项
 	//接收缓存sk->sk_rcvbuf分为两部分：
 	//（1） network buffer，一般占3/4，这部分是协议能够使用的。
 	//（2）application buffer，一般占1/4。
@@ -231,27 +233,40 @@ struct sock
 		struct sk_buff *tail;
 	} sk_backlog;
 	wait_queue_head_t	*sk_sleep;
+	//目的路由项缓存。一般都是在创建传输控制块发送数据报文时，发现未设置该字段才从路由表活路由缓存中查询到相应的路由项来设置该字段，
+	//这样就可以加速数据的输出，后续数据的输出不必再查询目的路由。某些情况下回刷新次目的路由缓存，
+	//比如断开连接、重新进行了连接、TCP重传、重新绑定端口等操作。
 	struct dst_entry	*sk_dst_cache;
+	//与IPSec相关的传输策略
 	struct xfrm_policy	*sk_policy[2];
+	//操作目的路由缓存的读写锁
 	rwlock_t		sk_dst_lock;
+	//接收队列sk_receive_queue中所有报文数据的总长度
 	atomic_t		sk_rmem_alloc;
 	//提交给IP层的发送数据大小(累加skb->truesize)
+	//所在传输控制块中，为发送而分配的所有SKB数据区的总大小
 	atomic_t		sk_wmem_alloc;
 	atomic_t		sk_omem_alloc;
 	//发送缓冲区长度的上限
 	int			sk_sndbuf;
+	//接收队列，等待用户进程读取。
+	//TCP比较特别，当接收到的数据不能直接复制到用户空间时才会缓存在此。
 	struct sk_buff_head	sk_receive_queue;
-	struct sk_buff_head	sk_write_queue;  //发送队列
+	//发送队列。
+	//在TCP中，此队列同时也是重传队列，在sk_send_head之前为重传队列，之后为发送队列，参见sk_send_head
+	struct sk_buff_head	sk_write_queue;  
 	struct sk_buff_head	sk_async_wait_queue;
-	 /* 发送队列的总大小，包含发送队列中skb负荷大小， 
+	/* 发送队列的总大小，包含发送队列中skb负荷大小， 
      * 以及sk_buff、sk_shared_info结构体、协议头的额外开销。 
      */  
+    //发送队列中所有报文数据的总长度，目前只用于TCP
 	int			sk_wmem_queued;
 	 ///* 预分配缓存大小，是已经分配但尚未使用的部分 */ 
 	int			sk_forward_alloc;
 	gfp_t			sk_allocation;
 	int			sk_route_caps;
 	int			sk_gso_type;
+	//标识接收缓存下限值，参见SO_RCVLOWAT选项
 	int			sk_rcvlowat;
 	unsigned long 		sk_flags;
 	unsigned long	        sk_lingertime;
@@ -275,8 +290,11 @@ struct sock
 	struct socket		*sk_socket;
 	void			*sk_user_data;
 	struct page		*sk_sndmsg_page;
+	//指向sk_write_queue队列中第一个未发送的节点，
+	//如果sk_send_head为空则表示发送队列是空的，发送队列上的报文已全部发送
 	struct sk_buff		*sk_send_head;
 	__u32			sk_sndmsg_off;
+	//标识有数据即将写入套接字，也就是有写数据的请求
 	int			sk_write_pending;
 	void			*sk_security;
 	void			(*sk_state_change)(struct sock *sk);
