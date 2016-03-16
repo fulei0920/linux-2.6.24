@@ -584,16 +584,20 @@ struct tcp_skb_cb
 	///SACK/FACK的状态flag或者是sack option的偏移(相对于tcp头的)
 	///当我们接收到正确的SACK后，这个域就会被初始化为sack所在的相对偏移(也就是相对于tcp头的偏移值，这样我们就能很容易得到sack option的位置).
 	__u8		sacked;		/* State flags for SACK/FACK.	*/
-//该段通过SACK被确认
-#define TCPCB_SACKED_ACKED	0x01		
-//改段已经重传
-#define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
-//该段在传输过程中已丢失
-#define TCPCB_LOST		0x04			/* SKB is lost			*/
-#define TCPCB_TAGBITS		0x07		/* All tag bits			*/
 
-#define TCPCB_EVER_RETRANS	0x80	/* Ever retransmitted frame	*/
-#define TCPCB_RETRANS		(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS)
+/*
+当一个skb被重传了，它的记分牌就会添加TCPCB_RETRANS标志。
+当重传的skb被sack确认或者ack累积确认时，就会清除TCPCB_SACKED_RETRANS标志，
+但是这个时候TCPCB_EVER_RETRANS还保留，表示这个skb曾经被重传过。
+TCPCB_EVER_RETRANS在更新RTT中发挥作用，如果skb曾经重传过，那么就不根据它来计算RTT
+采样值，更新srtt和rto等。
+*/
+#define TCPCB_SACKED_ACKED		0x01	//该段通过SACK被确认
+#define TCPCB_SACKED_RETRANS	0x02	//该段已经重传
+#define TCPCB_LOST				0x04	//该段在传输过程中已丢失
+#define TCPCB_TAGBITS			0x07		/* All tag bits			*/
+#define TCPCB_EVER_RETRANS		0x80	/* Ever retransmitted frame	*/
+#define TCPCB_RETRANS			(TCPCB_SACKED_RETRANS|TCPCB_EVER_RETRANS)
 
 //该段中存在外带数据
 #define TCPCB_URG		0x20	/* Urgent pointer advanced here	*/
@@ -1265,6 +1269,7 @@ static inline struct sk_buff *tcp_write_queue_next(struct sock *sk, struct sk_bu
 #define tcp_for_write_queue_from(skb, sk)				\
 		for (; (skb != (struct sk_buff *)&(sk)->sk_write_queue); skb = skb->next)
 
+//获取发送队列中第一个还未发送的节点
 static inline struct sk_buff *tcp_send_head(struct sock *sk)
 {
 	return sk->sk_send_head;

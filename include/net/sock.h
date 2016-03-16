@@ -507,10 +507,10 @@ static inline void sk_stream_set_owner_r(struct sk_buff *skb, struct sock *sk)
 static inline void sk_stream_free_skb(struct sock *sk, struct sk_buff *skb)
 {
 	skb_truesize_check(skb);
-	sock_set_flag(sk, SOCK_QUEUE_SHRUNK);
-	sk->sk_wmem_queued   -= skb->truesize;
+	sock_set_flag(sk, SOCK_QUEUE_SHRUNK);  	///设置标志，表示有skb释放了
+	sk->sk_wmem_queued   -= skb->truesize;	//* 更新发送队列所占内存*
 	sk->sk_forward_alloc += skb->truesize;
-	__kfree_skb(skb);
+	__kfree_skb(skb);						/* 释放skb占用的内存*/ 
 }
 
 /* The per-socket spinlock must be held here. */

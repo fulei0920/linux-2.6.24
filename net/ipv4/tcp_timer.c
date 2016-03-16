@@ -336,8 +336,8 @@ static void tcp_retransmit_timer(struct sock *sk)
 		tcp_enter_loss(sk, 0);
 		///现在开始重传skb。
 		tcp_retransmit_skb(sk, tcp_write_queue_head(sk));
-		///然后重启定时器，继续等待ack的到来。 
 		__sk_dst_reset(sk);
+		///然后重启定时器，继续等待ack的到来。 
 		goto out_reset_timer;
 	}
 

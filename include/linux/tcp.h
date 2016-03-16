@@ -479,8 +479,9 @@ struct tcp_sock
 	//如果重传了，则下次从重传队列队首重新处理
 	struct sk_buff *forward_skb_hint;
 
-	/* 快速路径中使用，上次第一个SACK块的结束处，现在直接从这里开始处理 */
-	//fastpath_skb_hint记录上一次处理SACK选项的最高序号段的SKB，而fastpath_cnt_hint记录上一次计算得到的fackets_out，
+	//SACK选项处理的快速路径中使用，上次第一个SACK块的结束处
+	//fastpath_skb_hint记录上一次处理SACK选项的最高序号段的SKB，即下一次处理SACK选项的开始处
+	//而fastpath_cnt_hint记录上一次计算得到的fackets_out，
 	//目的是为了在拥塞状态没有发生变化或接收到SACK没有发送变化等情况下，加速对fackets_out、sacked_out等的计算
 	struct sk_buff *fastpath_skb_hint;
 
@@ -532,6 +533,7 @@ struct tcp_sock
 	//记录当时snd_una，标记重传的起始点。它是检测是否可以进行拥塞撤销的条件之一，
 	//一般在完成拥塞撤销操作或进入拥塞控制Loss状态状态后清零。
 	///表示发生重传时的snd_una
+	///超时重传或FRTO时记录的snd_una
 	u32	undo_marker;	/* tracking retrans started here. */
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。

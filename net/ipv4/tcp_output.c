@@ -305,8 +305,7 @@ static u16 tcp_select_window(struct sock *sk)
 	return new_win;	//返回最终的接收窗口大小
 }
 
-static inline void TCP_ECN_send_synack(struct tcp_sock *tp,
-				       struct sk_buff *skb)
+static inline void TCP_ECN_send_synack(struct tcp_sock *tp, struct sk_buff *skb)
 {
 	TCP_SKB_CB(skb)->flags &= ~TCPCB_FLAG_CWR;
 	if (!(tp->ecn_flags&TCP_ECN_OK))
@@ -2188,11 +2187,13 @@ int tcp_send_synack(struct sock *sk)
 	struct sk_buff* skb;
 
 	skb = tcp_write_queue_head(sk);
-	if (skb == NULL || !(TCP_SKB_CB(skb)->flags&TCPCB_FLAG_SYN)) {
+	if (skb == NULL || !(TCP_SKB_CB(skb)->flags&TCPCB_FLAG_SYN))
+	{
 		printk(KERN_DEBUG "tcp_send_synack: wrong queue state\n");
 		return -EFAULT;
 	}
-	if (!(TCP_SKB_CB(skb)->flags&TCPCB_FLAG_ACK)) {
+	if (!(TCP_SKB_CB(skb)->flags&TCPCB_FLAG_ACK)) 
+	{
 		if (skb_cloned(skb)) {
 			struct sk_buff *nskb = skb_copy(skb, GFP_ATOMIC);
 			if (nskb == NULL)
