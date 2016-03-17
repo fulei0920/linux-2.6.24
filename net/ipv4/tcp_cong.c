@@ -337,7 +337,8 @@ void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int flag)
 		return;
 
 	/* In "safe" area, increase. */
-	if (tp->snd_cwnd <= tp->snd_ssthresh)
+	//we are in the slow - start phase
+	if (tp->snd_cwnd <= tp->snd_ssthresh) 
 		tcp_slow_start(tp);
 
 	/* In dangerous area, increase slowly. */
@@ -361,8 +362,12 @@ void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int flag)
 			if (tp->snd_cwnd < tp->snd_cwnd_clamp)
 				tp->snd_cwnd++;
 			tp->snd_cwnd_cnt = 0;
-		} else
+		} 
+		else
+		{
 			tp->snd_cwnd_cnt++;
+		}
+			
 	}
 }
 EXPORT_SYMBOL_GPL(tcp_reno_cong_avoid);

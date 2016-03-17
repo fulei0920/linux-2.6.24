@@ -779,9 +779,10 @@ static inline unsigned int tcp_left_out(const struct tcp_sock *tp)
  *	"Packets fast retransmitted"
  */
 //表示处于网络中(还未被确认)的数据包个数
+//(进入网络中的包) - (离开网络中的包)
 static inline unsigned int tcp_packets_in_flight(const struct tcp_sock *tp)
 {
-	return tp->packets_out + tp->retrans_out - tcp_left_out(tp);
+	return tp->packets_out - tcp_left_out(tp) + tp->retrans_out; 
 }
 
 /* If cwnd > ssthresh, we may raise ssthresh to be half-way to cwnd.

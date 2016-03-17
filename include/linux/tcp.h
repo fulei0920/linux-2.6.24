@@ -110,14 +110,16 @@ enum tcp_ca_state
 	//正常状态，执行slow start算法或者是congestion avoid算法，取决于拥塞窗口和ssthresh的大小
 	TCP_CA_Open = 0,
 #define TCPF_CA_Open	(1<<TCP_CA_Open)
-
+	//
 	//状态就是当第一次由于收到SACK或者重复的ack而检测到拥塞时，就进入这个状态
 	//当检测到duplicate ack或者是SACK时，进入此状态。在此状态下拥塞窗口不调整，没收到一个数据包都触发一个新的数据包的发送。
+	//此时，TCP会使用一些启发式方法判断是不是真的发生了包的丢失。
 	TCP_CA_Disorder = 1,
 #define TCPF_CA_Disorder (1<<TCP_CA_Disorder)
 
 	//由于一些拥塞通知事件而导致拥塞窗口减小,然后就会进入这个状态。比如ECN，ICMP，本地设备拥塞
 	//检测到由ECN，ICMP，或者本地设置引起的拥塞提示时，进入此状态。在此状态下，每收到2个ACK就把拥塞窗口-1，直到减为原来的一半
+	//本状态说明发生某种拥塞，例如ICMP源抑制、本地设备拥塞，所以TCP发送方会放缓数据发送
 	TCP_CA_CWR = 2,
 #define TCPF_CA_CWR	(1<<TCP_CA_CWR)
 
@@ -125,12 +127,16 @@ enum tcp_ca_state
 	//当检测到3个重复的ACK时进入此状态，一般由Disorder状态进入。立即重传第一个未确认的数据包，每收到2个ACK就把拥塞窗口-1
 	//直到见到ssthresh（此值在进入Recovery状态时设置为拥塞窗口的一半）。TCP停留在此状态直到刚进入此状态时所有驻留网络的数据包都得到确认，然后
 	//返回到open状态
+
+	//本状态代表发送方正在进行快速重传丢失的数据包。
 	TCP_CA_Recovery = 3,
 #define TCPF_CA_Recovery (1<<TCP_CA_Recovery)
 
 	//超时或者SACK被拒绝，此时表示数据包丢失，因此进入这个状态
 	//当RTO定时器超时时，进入此状态。所有驻留于网络的数据包都标记为Lost，拥塞窗口设置为1，启用slow start算法
 	//当进入此状态时所有驻留于网络的数据包得到确认后，返回到Open状态
+
+	//如果发生RTO，或者接收到的ACK与发送方记录的SACK信息不同步，就会进入这个状态。
 	TCP_CA_Loss = 4
 #define TCPF_CA_Loss	(1<<TCP_CA_Loss)
 };
@@ -523,7 +529,7 @@ struct tcp_sock
 	//left_out = fackets_out
 	u32	fackets_out;	/* FACK'd packets			*/
 
-	//记录发生拥塞时的snd_nxt， 标识重传队列的尾部
+	//记录发生拥塞时的最大的发送序号(snd_nxt)， 标识重传队列的尾部
 	u32	high_seq;	
 
 	//在主动连接时，记录第一个SYN段的发送时间，用来检测ACK序号是否回绕

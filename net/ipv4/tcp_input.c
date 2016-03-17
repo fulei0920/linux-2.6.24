@@ -131,7 +131,7 @@ int sysctl_tcp_abc __read_mostly;
 #define FLAG_RETRANS_DATA_ACKED	0x08 	/* "" "" some of which was retransmitted.	*/
 //接收的ACK段确认了SYN段
 #define FLAG_SYN_ACKED		0x10 /* This ACK acknowledged SYN.		*/
-//是新的SACK
+//是新的SACK--SACK确认了新的数据
 #define FLAG_DATA_SACKED	0x20 /* New SACK.				*/
 //在ACK段中存在ECE标志，显示收到拥塞通知
 #define FLAG_ECE			0x40 /* ECE in this ACK				*/
@@ -997,8 +997,7 @@ reset:
 	}
 }
 
-static void tcp_update_reordering(struct sock *sk, const int metric,
-				  const int ts)
+static void tcp_update_reordering(struct sock *sk, const int metric, const int ts)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	if (metric > tp->reordering) {
@@ -1174,7 +1173,8 @@ static int tcp_mark_lost_retrans(struct sock *sk, u32 received_upto)
 	int cnt = 0;
 	u32 new_low_seq = tp->snd_nxt;
 
-	tcp_for_write_queue(skb, sk) {
+	tcp_for_write_queue(skb, sk) 
+	{
 		u32 ack_seq = TCP_SKB_CB(skb)->ack_seq;
 
 		if (skb == tcp_send_head(sk))
@@ -1295,20 +1295,9 @@ static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb, u32 start
 	return in_sack;
 }
 
-/*
-*1. New ACK (+SACK) arrives. (tcp_sacktag_write_queue()) 
-* 2. Retransmission. (tcp_retransmit_skb(), tcp_xmit_retransmit_queue()) 
-* 3. Loss detection event of one of three flavors: 
-* 	A. Scoreboard estimator decided the packet is lost. 
-		* 	 A'. Reno "three dupacks" marks head of queue lost. 
-		*	 A''. Its FACK modfication, head until snd.fack is lost. 
-*	B. SACK arrives sacking data transmitted after never retransmitted 
-*		 hole was sent out. 
-* 	C. SACK arrives sacking SND.NXT at the moment, when the 
-* 	 segment was retransmitted. 
-*4. D-SACK added new rule: D-SACK changes any tag to S.
-*/
-
+//  prior_snd_una      snd_una     snd_nxt
+//--------|--------------|----------|-------
+//处理snd_una到snd_nxt之间被确认的报文段
 //ack_skb -- 新收到的ACK段
 //prior_snd_una -- 根据该ACK段更新发送窗口前的snd_una
 static int
@@ -1320,7 +1309,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	struct tcp_sack_block_wire *sp = (struct tcp_sack_block_wire *)(ptr+2);  //sack block的起始地址
 	struct sk_buff *cached_skb;
 	int num_sacks = (ptr[1] - TCPOLEN_SACK_BASE)>>3; //sack block的个数
-	int reord = tp->packets_out;
+	/* 乱序的起始包位置，一开始设为最大 */
+	int reord = tp->packets_out;   //用于计算本次的fackets_out，由于fackets_out必定小于或等于tp->packets_out，因此初始化为tp->packets_out
 	int prior_fackets;		//上次的fackets_out
 	u32 highest_sack_end_seq = tp->lost_retrans_low;
 	int flag = 0;
@@ -1443,7 +1433,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		struct sk_buff *skb;
 		__u32 start_seq = ntohl(sp->start_seq);
 		__u32 end_seq = ntohl(sp->end_seq);
-		int fack_count;
+		int fack_count;	//用于临时记录本次计算得到的fackets_out，如果大于传输控制块当前的fackets_out时，则更新到传输控制块中
 		int dup_sack = (found_dup_sack && (i == first_sack_index));  	//当前SACK是否为DSACK块
 		int next_dup = (found_dup_sack && (i+1 == first_sack_index));	//当前SACK的下一个SACK是否为DSACK块
 
@@ -1540,38 +1530,47 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 				tp->undo_retrans--;
 
 			/* The frame is ACKed. */
+			//如果此SKB已经确认过，则跳过该SKB，处理后续的SKB
 			if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una))
 			{
-				if (sacked & TCPCB_RETRANS) 
+				if (sacked & TCPCB_RETRANS)   
 				{
-					if ((dup_sack && in_sack) && (sacked & TCPCB_SACKED_ACKED))
-						reord = min(fack_count, reord);
+					if ((dup_sack && in_sack) && (sacked & TCPCB_SACKED_ACKED))  
+						reord = min(fack_count, reord); //重传，被重复确认。。。
 				}
 
 				/* Nothing to do; acked frame is about to be dropped. */
 				fack_count += tcp_skb_pcount(skb);
+				//这个skb已经被正常确认了，不用再处理了，它即将被丢弃
 				continue;
 			}
 
+			//如果这个包不包含在SACK块中，即在SACK块之外，则不用继续处理
 			if (!in_sack) 
 			{
 				fack_count += tcp_skb_pcount(skb);
 				continue;
 			}
 
-			if (!(sacked & TCPCB_SACKED_ACKED)) 
+			//如果skb还没有被标志为SACK，那么进行处理 
+			if (!(sacked & TCPCB_SACKED_ACKED))   //没有被 SACK确认过
 			{
-				if (sacked & TCPCB_SACKED_RETRANS) 
+				if (sacked & TCPCB_SACKED_RETRANS)  /* 有R标志，表示被重传过 */  
 				{
 					/* If the segment is not tagged as lost,
 					 * we do not clear RETRANS, believing
 					 * that retransmission is still in flight.
 					 */
+					//  * 如果之前的标志是：L | R，那么好，现在收到包了，可以清除R和L。 
+                    //    * 如果之前的标志是：R，那么认为现在收到的是orig，重传包还在路上，所以不用干活：） 
 					if (sacked & TCPCB_LOST)
 					{
-						TCP_SKB_CB(skb)->sacked &= ~(TCPCB_LOST|TCPCB_SACKED_RETRANS);
-						tp->lost_out -= tcp_skb_pcount(skb);
-						tp->retrans_out -= tcp_skb_pcount(skb);
+						//如果SACK确认的是丢失并经过重传的段，而此次进过了SACK确认，说明该段没有丢失，因此需要去除TCPCB_LOST和TCPCB_SACKED_RETRANS标记，同时调整lost_out和retrans_out
+					
+						//L|R   - orig is lost, retransmit is in flight.
+						TCP_SKB_CB(skb)->sacked &= ~(TCPCB_LOST|TCPCB_SACKED_RETRANS);  /* 取消L和R标志 */ 
+						tp->lost_out -= tcp_skb_pcount(skb);  /* 更新LOST包个数 */ 
+						tp->retrans_out -= tcp_skb_pcount(skb);  /* 更新RETRANS包个数 */ 
 
 						/* clear lost hint */
 						tp->retransmit_skb_hint = NULL;
@@ -1584,25 +1583,25 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 						/* New sack for not retransmitted frame,
 						 * which was in hole. It is reordering.
 						 */
-						if (fack_count < prior_fackets)
-							reord = min(fack_count, reord);
+						if (fack_count < prior_fackets)  //如果一个包落在highest_sack之前，它即没被SACK过，也不是重传的，那么 它肯定是乱序了，到现在才被SACK。 
+							reord = min(fack_count, reord);  //录乱序的起始
 
 						/* SACK enhanced F-RTO (RFC4138; Appendix B) */
 						if (!after(TCP_SKB_CB(skb)->end_seq, tp->frto_highmark))
 							flag |= FLAG_ONLY_ORIG_SACKED;
 					}
 
-					if (sacked & TCPCB_LOST)
+					if (sacked & TCPCB_LOST)   /* 如果有L标志 */  
 					{
-						TCP_SKB_CB(skb)->sacked &= ~TCPCB_LOST;
-						tp->lost_out -= tcp_skb_pcount(skb);
+						TCP_SKB_CB(skb)->sacked &= ~TCPCB_LOST;  /* 清除L标志 */  
+						tp->lost_out -= tcp_skb_pcount(skb);  /* 更新lost_out */  
 
 						/* clear lost hint */
 						tp->retransmit_skb_hint = NULL;
 					}
 				}
 
-				TCP_SKB_CB(skb)->sacked |= TCPCB_SACKED_ACKED;
+				TCP_SKB_CB(skb)->sacked |= TCPCB_SACKED_ACKED;  /* 打上S标志 */
 				flag |= FLAG_DATA_SACKED;
 				tp->sacked_out += tcp_skb_pcount(skb);
 
@@ -1615,8 +1614,10 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 					tp->highest_sack = TCP_SKB_CB(skb)->seq;
 					highest_sack_end_seq = TCP_SKB_CB(skb)->end_seq;
 				}
-			} else {
-				if (dup_sack && (sacked&TCPCB_RETRANS))
+			} 
+			else   //被SACK确认过  /* 已经有S标志 */  
+			{
+				if (dup_sack && (sacked & TCPCB_RETRANS)) //如果之前是R|S标志，且这个包被DSACK了，说明是乱序
 					reord = min(fack_count, reord);
 
 				fack_count += tcp_skb_pcount(skb);
@@ -1627,8 +1628,9 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			 * undo_retrans is decreased above, L|R frames
 			 * are accounted above as well.
 			 */
-			if (dup_sack &&
-			    (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS)) {
+			 //如果skb被D-SACK，并且它的重传标志还未被清除，那么现在清除。 
+			if (dup_sack && (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS))
+			{
 				TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_RETRANS;
 				tp->retrans_out -= tcp_skb_pcount(skb);
 				tp->retransmit_skb_hint = NULL;
@@ -1642,11 +1644,16 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			flag &= ~FLAG_ONLY_ORIG_SACKED;
 	}
 
+	//如果retrans_out不为0，且处于Recovery状态，说明有重传包丢失，进行处理。 
+
+	//当拥塞状态机处于Recovery状态中，
 	if (tp->retrans_out && after(highest_sack_end_seq, tp->lost_retrans_low) && icsk->icsk_ca_state == TCP_CA_Recovery)
 		flag |= tcp_mark_lost_retrans(sk, highest_sack_end_seq);
 
 	tcp_verify_left_out(tp);
 
+	 //* 更新乱序队列长度。 
+     //* 乱序队列的长度 = fackets_out - reord + 1，reord记录从第几个包开始乱序 
 	if ((reord < tp->fackets_out) && icsk->icsk_ca_state != TCP_CA_Loss &&
 	    (!tp->frto_highmark || after(tp->snd_una, tp->frto_highmark)))
 		tcp_update_reordering(sk, tp->fackets_out - reord, 0);
@@ -2619,7 +2626,8 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 	}
 
 	/* F. Process state. */
-	switch (icsk->icsk_ca_state) {
+	switch (icsk->icsk_ca_state)
+	{
 	case TCP_CA_Recovery:
 		if (!(flag & FLAG_SND_UNA_ADVANCED)) {
 			if (tcp_is_reno(tp) && is_dupack)
@@ -2639,7 +2647,8 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 			return;
 		/* Loss is undone; fall through to processing in Open state. */
 	default:
-		if (tcp_is_reno(tp)) {
+		if (tcp_is_reno(tp)) 
+		{
 			if (flag & FLAG_SND_UNA_ADVANCED)
 				tcp_reset_reno_sack(tp);
 			if (is_dupack)
@@ -2754,6 +2763,7 @@ static inline void tcp_ack_update_rtt(struct sock *sk, const int flag, const s32
 		tcp_ack_no_tstamp(sk, seq_rtt, flag);
 }
 
+//This routine implements a congestion control algorithm during slow start and fast retransmission. 
 static void tcp_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int good)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
@@ -2805,6 +2815,9 @@ static u32 tcp_tso_acked(struct sock *sk, struct sk_buff *skb)
  * is before the ack sequence we can discard it as it's confirmed to have
  * arrived at the other end.
  */
+//  prior_snd_una      snd_una     snd_nxt
+//--------|--------------|----------|-------
+//处理prior_snd_una到snd_una之间被确认的报文段
 static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_fackets)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2864,6 +2877,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 			{
 				if (sacked & TCPCB_SACKED_RETRANS)  /* 之前重传了还没有恢复*/
 					tp->retrans_out -= packets_acked;  /* 更新网络中重传且未确认段的数量*/  
+				
 				flag |= FLAG_RETRANS_DATA_ACKED;
 				ca_seq_rtt = -1;
 				seq_rtt = -1;
@@ -2906,7 +2920,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 			reord = min(cnt, reord);
 		}
 		tp->packets_out -= packets_acked;  /* 更新packets_out */  
-		cnt += packets_acked;   /* 累加此ACK确认的数据量*/  
+		cnt += packets_acked;   			/* 累加此ACK确认的数据量*/  
 
 		/* Initial outgoing SYN's get put onto the write_queue
 		 * just like anything else we transmit.  It is not
@@ -2917,12 +2931,12 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		 */
 		if (!(scb->flags & TCPCB_FLAG_SYN)) 
 		{
-			flag |= FLAG_DATA_ACKED;  /* 确认了新的数据 */
+			flag |= FLAG_DATA_ACKED;  	/* 确认了新的数据 */
 		} 
 		else
 		{
-			flag |= FLAG_SYN_ACKED;  /* 确认了SYN段 */  
-			tp->retrans_stamp = 0;   /* Clear the stamp of the first SYN */  
+			flag |= FLAG_SYN_ACKED;  	/* 确认了SYN段 */  
+			tp->retrans_stamp = 0;   	/* Clear the stamp of the first SYN */  
 		}
 
 		if (!fully_acked)  /* 如果TSO段没被完全确认，则到此为止*/
@@ -3033,9 +3047,9 @@ static void tcp_ack_probe(struct sock *sk)
 
 static inline int tcp_ack_is_dubious(const struct sock *sk, const int flag)
 {
-	//接收到的ACK是重复的
+	//表示接收到的ACK是重复的
 	//接收到SACK块或显示拥塞通知
-	//当前拥塞状态不为Open
+	//当前拥塞状态不为Open，已经进入了拥塞状态
 	return (!(flag & FLAG_NOT_DUP) || (flag & FLAG_CA_ALERT) || inet_csk(sk)->icsk_ca_state != TCP_CA_Open);
 }
 
@@ -3051,6 +3065,7 @@ static inline int tcp_may_raise_cwnd(const struct sock *sk, const int flag)
  */
 static inline int tcp_may_update_window(const struct tcp_sock *tp, const u32 ack, const u32 ack_seq, const u32 nwin)
 {
+	//RFC 793, p. 72
 	//1.确认序号在发送窗口的snd_una和snd_nxt之间
 	//2.ACK段的序号是最新的
 	//3.接收到重复ACK，并且接收方的接收窗口大于当前发送方的发送窗口(可能是带有数据段的TCP段)
@@ -3092,6 +3107,8 @@ static int tcp_ack_update_window(struct sock *sk, struct sk_buff *skb, u32 ack, 
 			/* Note, it is the only place, where fast path is recovered for sending TCP. */
 			//由于用于首部预测的标记与接收窗口大小有关，因此需要清零预测标志，
 			//然后调用tcp_fast_path_check，在满足条件的情况下重新计算首部预测标志
+			//We do it here because the window has changed and if are already in FAST path, prediction flag
+			//needs to be initialized as it takes the window into account.
 			tp->pred_flags = 0;
 			tcp_fast_path_check(sk);
 
@@ -3350,12 +3367,11 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 
 	//根据ACK的明确与否，更新拥塞窗口，进行拥塞控制
 
-	 /* 如果ACK是重复的、或者带有SACK选项、或者不是Open态*/  
+	//根据ACK段判断我们是否进入拥塞状态(收到拥塞信号，察觉到拥塞)，或者已经处于拥塞状态。
 	if (tcp_ack_is_dubious(sk, flag)) 
 	{
-		 /* 如果此ACK是可疑的*/  
-		  /* 可疑是指已经处于拥塞状态，或刚收到拥塞信号。 
-         * 在这种条件下如果想进行拥塞避免，必须符合： 
+
+        /* 在这种条件下如果想进行拥塞避免，必须符合： 
          * 1. 此ACK确认了新的数据 
          * 2. 不能处于FRTO状态 
          * 3. 处于Disorder或Loss状态 
