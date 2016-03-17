@@ -1244,9 +1244,9 @@ static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb, struct 
 	}
 
 	/* D-SACK for already forgotten data... Do dumb counting. */
-	//undo_retrans记录重传数据包的个数，如果undo_retrans降到0， * 就说明之前的重传都是不必要的，进行拥塞调整撤销。 
-	//DSACK、undo_marker < end_seq <= prior_snd_una
-	//判断dsack的数据是否已经被ack完全确认过了，如果确认过了，我们就需要更新undo_retrans域，这个域表示重传的数据段的个数。 
+	//dup_sack -- 表明接收者收到重复的数据
+	//undo_marker < end_seq <= prior_snd_una -- 表明该重复的数据在当前(undo_marker, prior_snd_una)重传范围之内，
+	//说明进行了不必要的重传, 网络拥塞可能不严重，减少重传undo_retrans计数，如果undo_retrans降到0，就说明之前的重传都是不必要的，进行拥塞调整撤销。 
 	if (dup_sack && !after(end_seq_0, prior_snd_una) && after(end_seq_0, tp->undo_marker))
 		tp->undo_retrans--;
 
@@ -1259,22 +1259,34 @@ static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb, struct 
  * which may fail and creates some hassle (caller must handle error case
  * returns).
  */
+//seq        end_seq
+//|             |seq       end_seq
+//|             ||            |seq            end_seq
+//|        |    ||            ||      |         |
+//<------a------><------b-----><--------c------->  //重传队列中的段a，b，c
+//         |<--------sack block------>|
+//      start_seq                  end_seq
 static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb, u32 start_seq, u32 end_seq)
 {
 	int in_sack, err;
 	unsigned int pkt_len;
-
+	
+	//检测当前的段是否整个处于该SACK块中(段b)，如果是，则说明当前的段接收方已完全接收到，无论是TSO段还是普通的段
 	in_sack = !after(start_seq, TCP_SKB_CB(skb)->seq) && !before(end_seq, TCP_SKB_CB(skb)->end_seq);
 
+	//如果当前段是TSO段且不整个处于SACK块中且与SACK块有交集(只有段a，段c两种情况)，
+	//则说明接收方收到了部分数据，那些已接受的段就不需要再传了，因此把TSO段分割成普通的段。
 	if (tcp_skb_pcount(skb) > 1 && !in_sack && after(TCP_SKB_CB(skb)->end_seq, start_seq))
 	{
-
+	
+		//如果SACK块的start_seq在段的seq之后，从段a看出seq和SACK快的start_seq之间的数据接收方没有接收到，因此使用start_seq - seq作为手动TSO分段的段长
+		//如果段的seq在SACK块的start_seq之后，从段c看出seq和SACK块的end_seq之间的数据接收方已经接收到，因此使用end_seq - seq作为手动TSO分段的段长
 		in_sack = !after(start_seq, TCP_SKB_CB(skb)->seq);
-
 		if (!in_sack)
 			pkt_len = start_seq - TCP_SKB_CB(skb)->seq;
 		else
 			pkt_len = end_seq - TCP_SKB_CB(skb)->seq;
+		//调用tcp_fragment()，手动对TSO段进行分段
 		err = tcp_fragment(sk, skb, pkt_len, skb_shinfo(skb)->gso_size);
 		if (err < 0)
 			return err;
@@ -1296,6 +1308,9 @@ static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb, u32 start
 * 	 segment was retransmitted. 
 *4. D-SACK added new rule: D-SACK changes any tag to S.
 */
+
+//ack_skb -- 新收到的ACK段
+//prior_snd_una -- 根据该ACK段更新发送窗口前的snd_una
 static int
 tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_una)
 {
@@ -1328,10 +1343,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	if (found_dup_sack)
 		flag |= FLAG_DSACKING_ACK;
 
-	/* Eliminate too old ACKs, but take into
-	 * account more or less fresh ones, they can
-	 * contain valid SACK info.
-	 */
+	/* Eliminate too old ACKs, but take into account more or less fresh ones, they can  contain valid SACK info. */
 	//如果收到的ACK段的确认序号是一个窗口以前的，则说明ACK太陈旧了，不需要处理，直接返回
 	if (before(TCP_SKB_CB(ack_skb)->ack_seq, prior_snd_una - tp->max_window))
 		return 0;
@@ -1367,8 +1379,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		} 
 		else 
 		{
-			if ((tp->recv_sack_cache[i].start_seq != start_seq) ||
-			    (tp->recv_sack_cache[i].end_seq != end_seq))
+			if ((tp->recv_sack_cache[i].start_seq != start_seq) || (tp->recv_sack_cache[i].end_seq != end_seq))
 				force_one_sack = 0;
 		}
 		tp->recv_sack_cache[i].start_seq = start_seq;
@@ -1421,7 +1432,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	/* Use SACK fastpath hint if valid */
 	cached_skb = tp->fastpath_skb_hint;
 	cached_fack_count = tp->fastpath_cnt_hint;
-	if (!cached_skb)
+	if (!cached_skb)  //根据tp->fastpath_skb_hint来确定快速路劲还是慢速路径处理
 	{
 		cached_skb = tcp_write_queue_head(sk);
 		cached_fack_count = 0;
@@ -1465,10 +1476,12 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		/* high_seq是进入Recovery或Loss时的snd_nxt，如果high_seq被SACK了，那么很可能有数据包 
           * 丢失了，不然就可以ACK掉high_seq返回Open态了。
 		*/
-		//如果sack段的结束序列号大于将要发送的最大序列号，这个情况说明我们可能有数据丢失。因此设置丢失标记。这里可以看到也就是上面所说的事件B到达
+		//这里可以看到也就是上面所说的事件B到达
+		//如果SACK超出了重传队列的尾部，则说明有段已经丢失， 需要加上LOST标记
 		if (after(end_seq, tp->high_seq))
 			flag |= FLAG_DATA_LOST;
 
+		//从skb开始遍历重传队列
 		tcp_for_write_queue_from(skb, sk)
 		{
 			int in_sack = 0;
@@ -1477,17 +1490,22 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			if (skb == tcp_send_head(sk))
 				break;
 
+			//为下一个SACK块的起始位置做缓存
 			cached_skb = skb;
 			cached_fack_count = fack_count;
+
+			//记录针对第一个SACK块在重传队列中处理时的最后一个SKB
+			//为下一个ACK的SACK选项的快速路径的起始位置做缓存
+			//若下一个ACK的SACK选项满足快速路径，则从从这里而不必从重传队列头开始处理
 			if (i == first_sack_index) 
 			{
 				tp->fastpath_skb_hint = skb;
 				tp->fastpath_cnt_hint = fack_count;
 			}
 
-			/* The retransmission queue is always in order, so
-			 * we can short-circuit the walk early.
-			 */
+			/* The retransmission queue is always in order, so we can short-circuit the walk early. */
+			//因为重传队列是排序的，因此当前SKB的起始序号大于当前处理的SACK的结束序号时，
+			//说明当前SKB不在此SACK范围之内，本次循环不必再做处理
 			if (!before(TCP_SKB_CB(skb)->seq, end_seq))
 				break;
 
@@ -1516,6 +1534,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			sacked = TCP_SKB_CB(skb)->sacked;
 
 			/* Account D-SACK for retransmitted packet. */
+			//如果是DSACK，且该TCP段被SACK(部分或全部)，同时该TCP段的记分牌有重传标记，
+			//则说明接收方已经重复收到了该TCP段，因此需要减少undo_retrans
 			if ((dup_sack && in_sack) && (sacked & TCPCB_RETRANS) && after(TCP_SKB_CB(skb)->end_seq, tp->undo_marker))
 				tp->undo_retrans--;
 
@@ -1524,7 +1544,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			{
 				if (sacked & TCPCB_RETRANS) 
 				{
-					if ((dup_sack && in_sack) && (sacked&TCPCB_SACKED_ACKED))
+					if ((dup_sack && in_sack) && (sacked & TCPCB_SACKED_ACKED))
 						reord = min(fack_count, reord);
 				}
 
