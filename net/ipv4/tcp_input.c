@@ -2725,6 +2725,8 @@ static void tcp_ack_saw_tstamp(struct sock *sk, int flag)
 	 * answer arrives rto becomes 120 seconds! If at least one of segments
 	 * in window is lost... Voila.	 			--ANK (010210)
 	 */
+	// 使用时间戳选时我们知道这个ACK的触发段的确切发送时间为：tp->rx_opt.rcv_tsecr，
+	//所以我们计算得到的RTT总是正确的，而不用去考虑触发这个ACK的是原始包还是重传包
 	struct tcp_sock *tp = tcp_sk(sk);
 	const __u32 seq_rtt = tcp_time_stamp - tp->rx_opt.rcv_tsecr;
 	tcp_rtt_estimator(sk, seq_rtt);
@@ -2744,6 +2746,8 @@ static void tcp_ack_no_tstamp(struct sock *sk, u32 seq_rtt, int flag)
 	 * I.e. Karn's algorithm. (SIGCOMM '87, p5.)
 	 */
 
+	//没有使用时间戳选项确认的数据段中不能包含重传过的段(FLAG_RETRANS_DATA_ACKED)。
+    //因为我们无法知道是哪个包，原始包还是重传包触发了这个ACK，因此无法确定触发包的发送时间。
 	if (flag & FLAG_RETRANS_DATA_ACKED)
 		return;
 
@@ -2779,17 +2783,19 @@ static void tcp_rearm_rto(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	///为0说明所有的传输的段都已经acked。此时remove定时器。否则重启定时器。
-	if (!tp->packets_out)
-	{
+	if (!tp->packets_out)  
+	{		/* 如果网络上没有数据，删除超时重传定时器*/
 		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
 	}
 	else
 	{
+		/* 重置超时重传定时器*/
 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
 	}
 }
 
 /* If we get here, the whole TSO packet has not been acked. */
+//获取TSO段被确认的子段数
 static u32 tcp_tso_acked(struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2843,9 +2849,10 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		u8 sacked = scb->sacked;
 
 		/* Determine how many packets and what bytes were acked, tso and else */
+		//tp->snd_una已经是更新过的了，所以从发送队列头到snd_una就是此ACK确认的数据量
 		if (after(scb->end_seq, tp->snd_una)) 
 		{
-			/* 如果没有使用TSO，或seq >= snd_una，那么就退出遍历*/  
+			/* 如果没有使用TSO，或 seq >= snd_una，那么就退出遍历*/  
 			//该段没有被确认
 			if (tcp_skb_pcount(skb) == 1 || !after(tp->snd_una, scb->seq))
 				break;
@@ -2886,7 +2893,9 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 			}
 			else  /* 如果此段没有被重传过*/  
 			{
-				ca_seq_rtt = now - scb->when;   /* 通过此ACK计算skb的RTT采样值*/  
+				//if the segment was never retransmitted and RTT is not yet recorded, we calculate RTT 
+				//based on the current timestamp and the time recorded when the segment was transmitted.
+				ca_seq_rtt = now - scb->when;   
 				last_ackt = skb->tstamp;			/* 获取此skb的发送时间，可以精确到纳秒！*/  
 				if (seq_rtt < 0) 
 				{
@@ -2967,7 +2976,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		} 
 		else 
 		{
-			 /* Non-retransmitted hole got filled? That's reordering。 
+		/* Non-retransmitted hole got filled? That's reordering。 
              * 如果之前没有SACK，prior_fackets为0，不会更新。 
              */  
 			/* Non-retransmitted hole got filled? That's reordering */
@@ -2978,6 +2987,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		tp->fackets_out -= min(pkts_acked, tp->fackets_out);   /* 更新fackets_out */  
 		/* hint's skb might be NULL but we don't need to care */
 		tp->fastpath_cnt_hint -= min_t(u32, pkts_acked, tp->fastpath_cnt_hint);
+
+		//如果定义了pkts_acked()钩子
 		if (ca_ops->pkts_acked)
 		{
 			s32 rtt_us = -1;
