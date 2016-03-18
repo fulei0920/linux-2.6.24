@@ -405,6 +405,8 @@ struct tcp_sock
 	u32	packets_out;	
 	
 	//重传但还没被确认的TCP段数目
+	//takes care of the retransmitted segments marked as lost. 
+	//This will be helpful in detecting partial ACKing in the congestion state. 
 	u32	retrans_out;	
 /*
  *      Options received (usually on last packet, some only on SYN packets).
@@ -530,6 +532,8 @@ struct tcp_sock
 	u32	fackets_out;	/* FACK'd packets			*/
 
 	//记录发生拥塞时的最大的发送序号(snd_nxt)， 标识重传队列的尾部
+	//tp->high_seq is set to the highest sequence number that has been
+	//transmitted at that point of time when we enter loss or recovery state.
 	u32	high_seq;	
 
 	//在主动连接时，记录第一个SYN段的发送时间，用来检测ACK序号是否回绕
@@ -540,12 +544,14 @@ struct tcp_sock
 	//一般在完成拥塞撤销操作或进入拥塞控制Loss状态状态后清零。
 	///表示发生重传时的snd_una
 	///超时重传或FRTO时记录的snd_una
+	//set to tp->snd_una when we enter the recovery phase and retransmit data,
 	u32	undo_marker;	/* tracking retrans started here. */
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。
 
 	//在恢复拥塞控制之前可进行撤销的重传段数。在进入FRTO算法或拥塞控制状态Loss时清零，
 	//在重传时计数，是检测是否可以进行拥塞撤销的条件之一。
+	//helps in detecting false retransmits in recovery/loss state
 	int	undo_retrans;	/* number of undoable retransmissions. */
 	u32	urg_seq;	/* Seq of received urgent pointer */
 	u16	urg_data;	/* Saved octet of OOB data and control flags */

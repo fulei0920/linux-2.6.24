@@ -1000,7 +1000,8 @@ reset:
 static void tcp_update_reordering(struct sock *sk, const int metric, const int ts)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	if (metric > tp->reordering) {
+	if (metric > tp->reordering) 
+	{
 		tp->reordering = min(TCP_MAX_REORDERING, metric);
 
 		/* This exciting event is worth to be remembered. 8) */
@@ -1179,8 +1180,10 @@ static int tcp_mark_lost_retrans(struct sock *sk, u32 received_upto)
 
 		if (skb == tcp_send_head(sk))
 			break;
+		
 		if (cnt == tp->retrans_out)
 			break;
+		
 		if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una))
 			continue;
 
@@ -1189,8 +1192,8 @@ static int tcp_mark_lost_retrans(struct sock *sk, u32 received_upto)
 
 		if (after(received_upto, ack_seq) &&
 		    (tcp_is_fack(tp) ||
-		     !before(received_upto,
-			     ack_seq + tp->reordering * tp->mss_cache))) {
+		     !before(received_upto, ack_seq + tp->reordering * tp->mss_cache)))
+		{
 			TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_RETRANS;
 			tp->retrans_out -= tcp_skb_pcount(skb);
 
@@ -1243,12 +1246,20 @@ static int tcp_check_dsack(struct tcp_sock *tp, struct sk_buff *ack_skb, struct 
 		}
 	}
 
-	/* D-SACK for already forgotten data... Do dumb counting. */
-	//dup_sack -- 表明接收者收到重复的数据
-	//undo_marker < end_seq <= prior_snd_una -- 表明该重复的数据在当前(undo_marker, prior_snd_una)重传范围之内，
-	//说明进行了不必要的重传, 网络拥塞可能不严重，减少重传undo_retrans计数，如果undo_retrans降到0，就说明之前的重传都是不必要的，进行拥塞调整撤销。 
+	//处理D-SACK中接收者收到重复且已被确认的数据的情况(undo_marker 到 prior_snd_una之间的数据)
+	//we check if the D-SACK is generated for the data that are already ACKed
+	//because the retransmitted segment reached before the original segment was ACKed
+	//or vice versa. In this case the end sequence of the SACK block should be within
+	//the ACKed sequence prior to arrival of this segment, and the end sequence should
+	//also be after the tp->undo_marker
 	if (dup_sack && !after(end_seq_0, prior_snd_una) && after(end_seq_0, tp->undo_marker))
+	{
+		//说明进行了不必要的重传, 网络拥塞可能不严重，减少重传undo_retrans计数，
+		//We will decrement tp->undo_retrans by 1 in such a case because that D-SACK is generated 
+		//because of retransmission of a segment that was considered lost when we entered the recovery phase. 
+		//But the segment reached the receiver later because of reordering.
 		tp->undo_retrans--;
+	}
 
 	return dup_sack;
 }
@@ -1300,6 +1311,12 @@ static int tcp_match_skb_to_sack(struct sock *sk, struct sk_buff *skb, u32 start
 //处理snd_una到snd_nxt之间被确认的报文段
 //ack_skb -- 新收到的ACK段
 //prior_snd_una -- 根据该ACK段更新发送窗口前的snd_una
+
+
+//There may be D - SACK blocks or SACK blocks which may have SACKed new data.
+//We need to update the state of each individual segment in the retransmit queue. 
+//We may have a new SACK block that has selectively ACKed a never retransmitted
+//segment or a retransmitted segment or lost segment.
 static int
 tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_una)
 {
@@ -1310,6 +1327,9 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	struct sk_buff *cached_skb;
 	int num_sacks = (ptr[1] - TCPOLEN_SACK_BASE)>>3; //sack block的个数
 	/* 乱序的起始包位置，一开始设为最大 */
+	//'reord' is calculated as segment lowest in the sequential order SACKed/
+	//ACKed so far which is recorded whenever we receive D-SACK or receive SACK
+	//for the hole which was never retransmitted.
 	int reord = tp->packets_out;   //用于计算本次的fackets_out，由于fackets_out必定小于或等于tp->packets_out，因此初始化为tp->packets_out
 	int prior_fackets;		//上次的fackets_out
 	u32 highest_sack_end_seq = tp->lost_retrans_low;
@@ -1320,21 +1340,28 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	int first_sack_index;
 	int force_one_sack;
 
-	if (!tp->sacked_out)			//如果之前没有SACKed的数据
+	//tp->sacked_out is zero which means that none of the segment were SACKed out prior to arrival of this segment
+	if (!tp->sacked_out)			//如果之前没有SACKed的数据， 这是我们第一次获取到sack选项
 	{
+		//we initialize FORWARD ACKed (tp→fackets_out) segment count to 0
+		//The reason is that forward ACKed segments are calculated based on the latest SACK information
 		if (WARN_ON(tp->fackets_out))
-			tp->fackets_out = 0;    	//FACK是根据最新的SACK来计算的，sacked_out为零，则 fackets_out也必定为零
+			tp->fackets_out = 0;    	
 		tp->highest_sack = tp->snd_una;	// tp->highest_sack置为发送队列的第一个数据包，因为没有SACK块
 	}
 	prior_fackets = tp->fackets_out;
 
-	/* 检查第一个SACK块是否为DSACK */  
+	//检查第一个SACK块是否为DSACK 
 	found_dup_sack = tcp_check_dsack(tp, ack_skb, sp, num_sacks, prior_snd_una);
 	if (found_dup_sack)
 		flag |= FLAG_DSACKING_ACK;
 
 	/* Eliminate too old ACKs, but take into account more or less fresh ones, they can  contain valid SACK info. */
 	//如果收到的ACK段的确认序号是一个窗口以前的，则说明ACK太陈旧了，不需要处理，直接返回
+	//we check if we got ACK for too old data. that is, ACK acknowledges one window of old data. 
+	//This ACK segment might have got stuck in the network for sometime before it reached before 
+	//we got ACK for the latest data that are received in sequence. In this case we discard the SACK 
+	//because the SACK information may be too old to consider and return.
 	if (before(TCP_SKB_CB(ack_skb)->ack_seq, prior_snd_una - tp->max_window))
 		return 0;
 
@@ -1345,13 +1372,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	/* SACK fastpath:
 	 * if the only SACK change is the increase of the end_seq of
 	 * the first block then only apply that SACK block
-	 * and use retrans queue hinting otherwise slowpath */
-
-	/* 判断是否进入快速路径。 
-     * 对第一个块：只要求起始序号相同 
-     * 对于非第一个块：要求起始序号和结束序号都相同 
-     * 也就是说，快速路径指的是只有第一个块的结束序号增加的情况 
-     */  
+	 * and use retrans queue hinting otherwise slowpath */  
 
 	//将SACK块存储到recv_sack_cache中，同时确定快速路径还是慢速路径处理
 	//如果只有第一个SACK块的end_seq出现了增加，则执行快速路径，从上次处理SACK结束处开始chu
@@ -1434,7 +1455,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		__u32 start_seq = ntohl(sp->start_seq);
 		__u32 end_seq = ntohl(sp->end_seq);
 		int fack_count;	//用于临时记录本次计算得到的fackets_out，如果大于传输控制块当前的fackets_out时，则更新到传输控制块中
-		int dup_sack = (found_dup_sack && (i == first_sack_index));  	//当前SACK是否为DSACK块
+		int dup_sack = (found_dup_sack && (i == first_sack_index));  	//if the SACK block under consideration is D-SACK
 		int next_dup = (found_dup_sack && (i+1 == first_sack_index));	//当前SACK的下一个SACK是否为DSACK块
 
 		sp++;
@@ -1463,15 +1484,21 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 		fack_count = cached_fack_count;
 
 		/* Event "B" in the comment above. */
-		/* high_seq是进入Recovery或Loss时的snd_nxt，如果high_seq被SACK了，那么很可能有数据包 
-          * 丢失了，不然就可以ACK掉high_seq返回Open态了。
-		*/
+		// high_seq是进入Recovery或Loss时的snd_nxt，如果high_seq被SACK了，那么很可能有数据包丢失了，不然就可以ACK掉high_seq返回Open态了。
 		//这里可以看到也就是上面所说的事件B到达
 		//如果SACK超出了重传队列的尾部，则说明有段已经丢失， 需要加上LOST标记
+		//it may happen that the congestion window allows us to transmit more data before we enter the
+		//OPEN state. In such a case, we may transmit data with sequence higher than tp->high_seq in recovery state.
+		//If we get a SACK that covers tp->high_seq, we consider that some data are lost here. 
+		//Otherwise we would have gotten ACK for the entire data transmitted so far, 
+		//if SACK blocks are generated because segments got reordered in the network instead of getting lost. 
+		//We set a data loss flag in this case and will check later if we actually lost any data or not. 
 		if (after(end_seq, tp->high_seq))
 			flag |= FLAG_DATA_LOST;
 
-		//从skb开始遍历重传队列
+		//从skb开始遍历重传队列(从prior_snd_una开始)
+		//we traverse the entire retransmit queue for each SACK block. The segments in the retransmit queue may
+		//already be tagged. These segments are marked either retransmitted, SACKed, lost, or none of these
 		tcp_for_write_queue_from(skb, sk)
 		{
 			int in_sack = 0;
@@ -1493,9 +1520,11 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 				tp->fastpath_cnt_hint = fack_count;
 			}
 
-			/* The retransmission queue is always in order, so we can short-circuit the walk early. */
-			//因为重传队列是排序的，因此当前SKB的起始序号大于当前处理的SACK的结束序号时，
-			//说明当前SKB不在此SACK范围之内，本次循环不必再做处理
+			//The segments in the retransmit queue are arranged in order of increasing start
+			//sequence number. So, if we find that the end sequence of the SACK block is below
+			//the start sequence of the segment, we just skip through this SACK block and move
+			//on to the next SACK block.If not so, the SACK block is covered by at least one of 
+			//the segments in the retransmit queue.
 			if (!before(TCP_SKB_CB(skb)->seq, end_seq))
 				break;
 
@@ -1518,32 +1547,43 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			/* DSACK info lost if out-of-mem, try SACK still */
 			if (in_sack <= 0)
 				in_sack = tcp_match_skb_to_sack(sk, skb, start_seq, end_seq);
-			if (unlikely(in_sack < 0))
+			if (unlikely(in_sack < 0))  //error happend
 				break;
 
 			sacked = TCP_SKB_CB(skb)->sacked;
 
 			/* Account D-SACK for retransmitted packet. */
-			//如果是DSACK，且该TCP段被SACK(部分或全部)，同时该TCP段的记分牌有重传标记，
+			//(dup_sack && in_sack) -- 接收方已经重复收到了该TCP段
+			//(sacked & TCPCB_RETRANS) -- 该TCP段被重传了
+			//after(TCP_SKB_CB(skb)->end_seq, tp->undo_marker) -- 
 			//则说明接收方已经重复收到了该TCP段，因此需要减少undo_retrans
+			//该SKB在loss/recovery状态被重传，接收方重复接收到了该SKB，说明该SKB没有丢失，而是被网络延时了，没有必要进行重传
+			//An end sequence of the segment occurring after an undo marker(tp->undo_marker) means that 
+			//the segment was retransmitted after TCP entered loss/recovery state.
 			if ((dup_sack && in_sack) && (sacked & TCPCB_RETRANS) && after(TCP_SKB_CB(skb)->end_seq, tp->undo_marker))
 				tp->undo_retrans--;
 
 			/* The frame is ACKed. */
-			//如果此SKB已经确认过，则跳过该SKB，处理后续的SKB
+			//we check if the current segment is ACKed by the received segment(prior_snd_una 与 snd_una之间)
 			if (!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una))
 			{
+				//we check if this was result of reordering or not
 				if (sacked & TCPCB_RETRANS)   
 				{
-					if ((dup_sack && in_sack) && (sacked & TCPCB_SACKED_ACKED))  
-						reord = min(fack_count, reord); //重传，被重复确认。。。
+					if ((dup_sack && in_sack) && (sacked & TCPCB_SACKED_ACKED))  //判断是否乱序
+						//We record reordering as a minimum of reorder segments and forward ACKed segments 
+						reord = min(fack_count, reord); 
 				}
 
 				/* Nothing to do; acked frame is about to be dropped. */
 				fack_count += tcp_skb_pcount(skb);
 				//这个skb已经被正常确认了，不用再处理了，它即将被丢弃
+				//we continue with the next segment in the retransmit queue. Since a segment is ACKed completely, 
+				//we will remove this from the retransmit queue in tcp_clean_rtx_queue().
 				continue;
 			}
+
+			//We are here because the current segment under examination is not ACKed.
 
 			//如果这个包不包含在SACK块中，即在SACK块之外，则不用继续处理
 			if (!in_sack) 
@@ -1583,6 +1623,8 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 						/* New sack for not retransmitted frame,
 						 * which was in hole. It is reordering.
 						 */
+						//we try to check here that the current segment is lower in order (fack_count) than 
+						//the previously highest-order SACKed segment (tp->facked_out).
 						if (fack_count < prior_fackets)  //如果一个包落在highest_sack之前，它即没被SACK过，也不是重传的，那么 它肯定是乱序了，到现在才被SACK。 
 							reord = min(fack_count, reord);  //录乱序的起始
 
@@ -1681,14 +1723,14 @@ static void tcp_check_reno_reordering(struct sock *sk, const int addend)
 	holes = max(tp->lost_out, 1U);
 	holes = min(holes, tp->packets_out);
 
-	if ((tp->sacked_out + holes) > tp->packets_out) {
+	if ((tp->sacked_out + holes) > tp->packets_out)
+	{
 		tp->sacked_out = tp->packets_out - holes;
 		tcp_update_reordering(sk, tp->packets_out + addend, 0);
 	}
 }
 
 /* Emulate SACKs for SACKless connection: account for a new dupack. */
-
 static void tcp_add_reno_sack(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2552,15 +2594,27 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 
 	/* Some technical things:
 	 * 1. Reno does not count dupacks (sacked_out) automatically. */
+	 
+	//Reno implementation simulates SACKed segments based on duplicate ACKs. 
+	//In the case where SACK is supported, we account for the SACK count once a SACKed-out segment is ACKed
+	//in-sequence (tcp_clean_rtx_queue). But in the case of Reno, segments are never marked
+	//SACKed out so we take care of the Reno Sack count here.
 	if (!tp->packets_out)
 		tp->sacked_out = 0;
 
+	//In the case where the SACK count is zero, the FACK count should also necessarily be to zero 
+	//because the FACK count is derived only if at least one segment is SACKed out
 	if (WARN_ON(!tp->sacked_out && tp->fackets_out))
 		tp->fackets_out = 0;
 
 	/* Now state machine starts.
 	 * A. ECE, hence prohibit cwnd undoing, the reduction is required. */
-	if (flag&FLAG_ECE)
+	//Irrespective of whichever state we are currently in, if an ECE flag is found in the TCP header, 
+	//we reset a prior slow-start threshold. The reason for this is congestion that is sensed by one 
+	//of the intermediate routers. If we do not do this and we are about to undo from a non-open state, 
+	//we may end up increasing the congestion window to a very high value in tcp_undo_cwr(), 
+	//thereby aggravating the congestion conditions.
+	if (flag & FLAG_ECE)
 		tp->prior_ssthresh = 0;
 
 	/* B. In all the states check for reneging SACKs. */
@@ -2568,10 +2622,25 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		return;
 
 	/* C. Process data loss notification, provided it is valid. */
-	if ((flag&FLAG_DATA_LOST) &&
-	    before(tp->snd_una, tp->high_seq) &&
-	    icsk->icsk_ca_state != TCP_CA_Open &&
-	    tp->fackets_out > tp->reordering) {
+		//If we are in the congestion state and we receive a SACK block that covers tp->high_seq, 
+		//it means that the new segment transmitted after the lost segment was retransmitted got SACKed. 
+		//This gives us indication that the new segment reached before the retransmitted segment reached
+		//the receiver. In this case, we can assume that the data in the window are lost. We check for 
+		//some more conditions here before declaring that the data are lost.
+	if ((flag & FLAG_DATA_LOST) 
+		//in-sequence data acknowledged so far is below tp->high_seq which means the segment covering 
+		//tp->high_seq has reached the receiver as an out-of-order segment that has been SACKed 
+		&& before(tp->snd_una, tp->high_seq) 
+		//We are in any congestion state other than an OPEN state. It mayhappen that TCP has entered 
+		//into the congestion state incorrectly because of either reordering or fast RTO. In such cases, 
+		//we are able to undo from the congestion state with tp→high_seq already set.
+		&& icsk->icsk_ca_state != TCP_CA_Open 
+		//the number of FACKed segments is greater than the reordered segments. This surely means that 
+		//some of the segments at the start of the retransmit queue can be considered lost. The segments 
+		//that need to be marked lost are all those segments from the beginning of the queue which are not
+		//yet SACKed
+		&& tp->fackets_out > tp->reordering)
+	{
 		tcp_mark_head_lost(sk, tp->fackets_out - tp->reordering);
 		NET_INC_STATS_BH(LINUX_MIB_TCPLOSS);
 	}
@@ -2687,7 +2756,8 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		tp->undo_marker = tp->snd_una;
 		tp->undo_retrans = tp->retrans_out;
 
-		if (icsk->icsk_ca_state < TCP_CA_CWR) {
+		if (icsk->icsk_ca_state < TCP_CA_CWR) 
+		{
 			if (!(flag&FLAG_ECE))
 				tp->prior_ssthresh = tcp_current_ssthresh(sk);
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
