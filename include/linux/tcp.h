@@ -538,6 +538,7 @@ struct tcp_sock
 
 	//在主动连接时，记录第一个SYN段的发送时间，用来检测ACK序号是否回绕
 	//在数据传输阶段，当发送超时重传时，记录上次重传阶段第一个重传段的发送时间，用来判断是否可以进行拥塞撤销
+	// timestamp of the first retransmission
 	u32	retrans_stamp;	
 	//在使用F-RTO算法进行发送超时处理，或进入Recovery进行重传，或进入Loss开始慢启动时，
 	//记录当时snd_una，标记重传的起始点。它是检测是否可以进行拥塞撤销的条件之一，
