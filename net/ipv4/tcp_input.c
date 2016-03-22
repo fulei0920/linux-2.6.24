@@ -131,7 +131,7 @@ int sysctl_tcp_abc __read_mostly;
 #define FLAG_RETRANS_DATA_ACKED	0x08 	/* "" "" some of which was retransmitted.	*/
 //接收的ACK段确认了SYN段
 #define FLAG_SYN_ACKED		0x10 /* This ACK acknowledged SYN.		*/
-//是新的SACK--SACK确认了新的数据
+//是新的SACK(SACK确认了新的数据)
 #define FLAG_DATA_SACKED	0x20 /* New SACK.				*/
 //在ACK段中存在ECE标志，显示收到拥塞通知
 #define FLAG_ECE			0x40 /* ECE in this ACK				*/
@@ -896,9 +896,12 @@ void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 	tp->bytes_acked = 0;
 	if (icsk->icsk_ca_state < TCP_CA_CWR) 
 	{
+		//tp->undo_marker is not set because we are sure that we are not retransmitting anything in this state
+		//(tp→undo_marker should be set to undo from the congestion state; refer to tcp_may_undo()).
 		tp->undo_marker = 0;
 		if (set_ssthresh)
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
+		//the send congestion window is reduced to a value so that we should be able to send a maximum of one segment.
 		tp->snd_cwnd = min(tp->snd_cwnd, tcp_packets_in_flight(tp) + 1U);
 		tp->snd_cwnd_cnt = 0;
 		tp->high_seq = tp->snd_nxt;
@@ -1956,8 +1959,7 @@ static void tcp_enter_frto_loss(struct sock *sk, int allowed_segments, int flag)
 	tp->frto_counter = 0;
 	tp->bytes_acked = 0;
 
-	tp->reordering = min_t(unsigned int, tp->reordering,
-					     sysctl_tcp_reordering);
+	tp->reordering = min_t(unsigned int, tp->reordering, sysctl_tcp_reordering);
 	tcp_set_ca_state(sk, TCP_CA_Loss);
 	tp->high_seq = tp->frto_highmark;
 	TCP_ECN_queue_cwr(tp);
@@ -2094,6 +2096,10 @@ static int tcp_check_sack_reneging(struct sock *sk)
 	return 0;
 }
 
+//In the case of SACK implementation, we exactly know FACKed-out segments, but in Reno implementation 
+//we hardly have an idea of it. So, we consider only SACKed-out segments (number of duplicate ACKs + 1) 
+//as FACKed-out segments in Reno implementation. We add one because we consider one segment lost at the 
+//head of the retransmit queue in the case of Reno Implementation. 
 static inline int tcp_fackets_out(struct tcp_sock *tp)
 {
 	return tcp_is_reno(tp) ? tp->sacked_out+1 : tp->fackets_out;
@@ -2104,12 +2110,26 @@ static inline int tcp_skb_timedout(struct sock *sk, struct sk_buff *skb)
 	return (tcp_time_stamp - TCP_SKB_CB(skb)->when > inet_csk(sk)->icsk_rto);
 }
 
+//We try to find out if the head of the retransmit queue is not ACKed even after it
+//has elapsed more than RTO since it was transmitted. Timestamp is stored in each
+//segment (skb->when) when it is transmitted in tcp_transmit_skb().The retransmit 
+//timer won't fire for the next segment (head of the retransmit queue) even if the 
+//segment has elapsed more than RTO (tp->rto) because the retransmit timer is 
+//started only after the ACK for the previous segment was received. When we receive
+//ACK for a segment, we set a retransmission timeout timer for the next segment in
+//tcp_ack()->tcp_ack_packets_out().The timeout value for the retransmission timer
+//is set to tp->rto, even though the next segment was transmitted much earlier. So,
+//timeout for the next segment is slightly overestimated by time lapsed since it was
+//transmitted and the ACK for the previous segment arrived.  We can detect early
+//timeout for the retransmit queue head by calling tcp_head_timedout()
 static inline int tcp_head_timedout(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	return tp->packets_out &&
-	       tcp_skb_timedout(sk, tcp_write_queue_head(sk));
+	//we check if there are any segments which are transmitted (tp→packets_out > 0). If
+	//so, we check if the head of the list has timed out by using the buffer's timestamp
+	//stored at the time when it is transmitted (TCP_SKB_CB(skb->when))
+	return tp->packets_out && tcp_skb_timedout(sk, tcp_write_queue_head(sk));
 }
 
 /* Linux NewReno/SACK/FACK/ECN state machine.
@@ -2220,12 +2240,20 @@ static int tcp_time_to_recover(struct sock *sk)
 		return 1;
 
 	/* Not-A-Trick#2 : Classic rule... */
+	//Check here is the number of Facked-out segments that have exceeded reordering length
+	//If the condition is true, it means that some of the segments at the beginning of the 
+	//retransmit queue are considered lost because the rest of them covered by reorder length 
+	//are considered as being reordered in the network and will appear sooner or later. 
 	if (tcp_fackets_out(tp) > tp->reordering)
 		return 1;
 
 	/* Trick#3 : when we use RFC2988 timer restart, fast
 	 * retransmit can be triggered by timeout of queue head.
 	 */
+	//we check if the head of the retransmit queue has timed out 
+	//The retransmission timer is reset on reception of each ACK. The packet should be ACKed 
+	//within an estimated RTO. If the time for the packet exceeds RTO, it is another way to 
+	//signal early retransmission.
 	if (tcp_head_timedout(sk))
 		return 1;
 
@@ -2235,7 +2263,8 @@ static int tcp_time_to_recover(struct sock *sk)
 	packets_out = tp->packets_out;
 	if (packets_out <= tp->reordering &&
 	    tp->sacked_out >= max_t(__u32, packets_out/2, sysctl_tcp_reordering) &&
-	    !tcp_may_send_now(sk)) {
+	    !tcp_may_send_now(sk)) 
+	{
 		/* We have nothing to send. This connection is limited
 		 * either by receiver window or by application.
 		 */
@@ -2250,16 +2279,15 @@ static int tcp_time_to_recover(struct sock *sk)
  * retransmitted past LOST markings in the first place? I'm not fully sure
  * about undo and end of connection cases, which can cause R without L?
  */
-static void tcp_verify_retransmit_hint(struct tcp_sock *tp,
-				       struct sk_buff *skb)
+static void tcp_verify_retransmit_hint(struct tcp_sock *tp, struct sk_buff *skb)
 {
 	if ((tp->retransmit_skb_hint != NULL) &&
-	    before(TCP_SKB_CB(skb)->seq,
-	    TCP_SKB_CB(tp->retransmit_skb_hint)->seq))
+	    before(TCP_SKB_CB(skb)->seq, TCP_SKB_CB(tp->retransmit_skb_hint)->seq))
 		tp->retransmit_skb_hint = NULL;
 }
 
 /* Mark head of queue up as lost. */
+//packets -- the number of segments to be marked lost
 static void tcp_mark_head_lost(struct sock *sk, int packets)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2289,7 +2317,9 @@ static void tcp_mark_head_lost(struct sock *sk, int packets)
 		cnt += tcp_skb_pcount(skb);
 		if (cnt > packets || after(TCP_SKB_CB(skb)->end_seq, tp->high_seq))
 			break;
-		if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_SACKED_ACKED|TCPCB_LOST))) {
+		
+		if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_SACKED_ACKED|TCPCB_LOST))) 
+		{
 			TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
 			tp->lost_out += tcp_skb_pcount(skb);
 			tcp_verify_retransmit_hint(tp, skb);
@@ -2304,12 +2334,22 @@ static void tcp_update_scoreboard(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (tcp_is_fack(tp)) {
+	//In the case where FACK is implemented, we take difference of FACKed-out segment
+	//and disorder length to estimate the lost segments. Otherwise we assume that only
+	//the head of the retransmit queue is lost. 
+	if (tcp_is_fack(tp)) 
+	{
 		int lost = tp->fackets_out - tp->reordering;
 		if (lost <= 0)
 			lost = 1;
 		tcp_mark_head_lost(sk, lost);
-	} else {
+	} 
+	else 
+	{
+		//In the case where SACK is not supported or it is Reno implementation, we have
+		//little or no idea of reordering and the segments that have reached the receiver. So,
+		//in this case we mark only one segment at the head of the retransmit queue as
+		//lost.
 		tcp_mark_head_lost(sk, 1);
 	}
 
@@ -2318,19 +2358,27 @@ static void tcp_update_scoreboard(struct sock *sk)
 	 * Hence, we can detect timed out packets during fast
 	 * retransmit without falling to slow start.
 	 */
-	if (!tcp_is_reno(tp) && tcp_head_timedout(sk)) {
+	//In the case where head of the retransmit queue has timed out, we check for
+	//each segment in the retransmit queue which has timed out in loop 
+	if (!tcp_is_reno(tp) && tcp_head_timedout(sk))
+	{
 		struct sk_buff *skb;
 
-		skb = tp->scoreboard_skb_hint ? tp->scoreboard_skb_hint
-			: tcp_write_queue_head(sk);
+		skb = tp->scoreboard_skb_hint ? tp->scoreboard_skb_hint : tcp_write_queue_head(sk);
 
-		tcp_for_write_queue_from(skb, sk) {
+		tcp_for_write_queue_from(skb, sk)
+		{
 			if (skb == tcp_send_head(sk))
 				break;
 			if (!tcp_skb_timedout(sk, skb))
 				break;
 
-			if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_SACKED_ACKED|TCPCB_LOST))) {
+			if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_SACKED_ACKED|TCPCB_LOST))) 
+			{
+				//we mark the segment as lost and increment the lost counter. This is 
+				//just a proactive approach or a protective way to sense any congestion 
+				//and retransmit at least one segment so that the retransmit timer does 
+				//not experience timeout and we can avoid the loss state.
 				TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
 				tp->lost_out += tcp_skb_pcount(skb);
 				tcp_verify_retransmit_hint(tp, skb);
@@ -2363,19 +2411,25 @@ static inline u32 tcp_cwnd_min(const struct sock *sk)
 }
 
 /* Decrease cwnd each second ack. */
+//try to reduce the congestion window on the reception of every second ACK
 static void tcp_cwnd_down(struct sock *sk, int flag)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	int decr = tp->snd_cwnd_cnt + 1;
 
 	if ((flag&(FLAG_ANY_PROGRESS|FLAG_DSACKING_ACK)) ||
-	    (tcp_is_reno(tp) && !(flag&FLAG_NOT_DUP))) {
+	    (tcp_is_reno(tp) && !(flag&FLAG_NOT_DUP)))
+	{
 		tp->snd_cwnd_cnt = decr&1;
 		decr >>= 1;
 
 		if (decr && tp->snd_cwnd > tcp_cwnd_min(sk))
 			tp->snd_cwnd -= decr;
-
+		//try to keep the congestion window such that at the most one new segment
+		//can be transmitted which is calculated as packets_in_flight() + 1. 
+		//Otherwise if the congestion window is less than the number of packets in 
+		//flight + 1, we wait for more segments to be ACKed before we can transmit 
+		//any new segment.
 		tp->snd_cwnd = min(tp->snd_cwnd, tcp_packets_in_flight(tp)+1);
 		tp->snd_cwnd_stamp = tcp_time_stamp;
 	}
@@ -2384,10 +2438,23 @@ static void tcp_cwnd_down(struct sock *sk, int flag)
 /* Nothing was retransmitted or returned timestamp is less
  * than timestamp of the first retransmission.
  */
+//From this logic we can conclude that we can undo from loss state as soon as we get
+//a duplicate ACK from the window that got us into congestion because the timestamp 
+//echoed will always be less than the timestamp for the first retransmitted segment.
+// We get back to the congestion state prior to entering the congestion state,
+//but we exit the loss state only if SACK is supported over the connection; otherwise
+//we remain in the loss state even with a high rate of data transmission.
+
+//We undo from the recovery state only if we received an ACK that ACKed full (tp→high_seq) or
+//partial (current tp→snd_una is higher than the value before the ACK being processed arrived)
+//data but not from retransmission but from original transmissions (tp->retrans_stamp > tp->rcv_tsecr). 
+
+//For the same reason, tcp_try_undo_recovery() is called only when we get partial/full data ACKed, 
+//whereas tcp_try_undo_loss() is called irrespective of the fact that we obtained a duplicate ACK 
+//or data ACKed in tcp_fastretrans_alert().
 static inline int tcp_packet_delayed(struct tcp_sock *tp)
 {
-	return !tp->retrans_stamp ||
-		(tp->rx_opt.saw_tstamp && tp->rx_opt.rcv_tsecr &&
+	return !tp->retrans_stamp || (tp->rx_opt.saw_tstamp && tp->rx_opt.rcv_tsecr &&
 		 (__s32)(tp->rx_opt.rcv_tsecr - tp->retrans_stamp) < 0);
 }
 
@@ -2456,8 +2523,7 @@ static inline int tcp_may_undo(struct tcp_sock *tp)
 	//necessarily mean that retransmitted segments filled the hole. 
 	//It may also happen that the original packets that reached the receiver 
 	//prior to retransmissions got delayed. 
-	return tp->undo_marker &&
-		(!tp->undo_retrans || tcp_packet_delayed(tp));
+	return tp->undo_marker && (!tp->undo_retrans || tcp_packet_delayed(tp));
 }
 
 /* People celebrate: "We love our President!" */
@@ -2465,7 +2531,8 @@ static int tcp_try_undo_recovery(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (tcp_may_undo(tp)) {
+	if (tcp_may_undo(tp)) 
+	{
 		/* Happy end! We did not retransmit anything
 		 * or our original transmission succeeded.
 		 */
@@ -2477,13 +2544,16 @@ static int tcp_try_undo_recovery(struct sock *sk)
 			NET_INC_STATS_BH(LINUX_MIB_TCPFULLUNDO);
 		tp->undo_marker = 0;
 	}
-	if (tp->snd_una == tp->high_seq && tcp_is_reno(tp)) {
+	
+	if (tp->snd_una == tp->high_seq && tcp_is_reno(tp)) 
+	{
 		/* Hold old state until something *above* high_seq
 		 * is ACKed. For Reno it is MUST to prevent false
 		 * fast retransmits (RFC2582). SACK TCP is safe. */
 		tcp_moderate_cwnd(tp);
 		return 1;
 	}
+	
 	tcp_set_ca_state(sk, TCP_CA_Open);
 	return 0;
 }
@@ -2493,6 +2563,16 @@ static void tcp_try_undo_dsack(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
+	//It may happen that we received acknowledged tp->high_seq and recovered from congestion to the 
+	//OPEN state without undoing from the congestion state. So tp->undo_marker and tp->undo_retrans 
+	//will still be nonzero. This means that we may still have retransmissions in the network which 
+	//may reach the destination later generating DSACK. If we received a duplicate ACK containing 
+	//DSACK from the window that got us into the congestion state causing tp->undo_retrans to become
+	//zero, we try to undo congestion window reduction. It means that the original transmissions for 
+	//all the retransmitted data during the congestion state have reached the receiver generating DSACK.
+	//So, our retransmission was false. We won't leave the current state (i.e., TCP_CA_Disorder) but 
+	//will reset the congestion state variables values that were set prior to entering the congestion 
+	//state. We leave the TCP_CA_Disorder state only when something above tp->high_seq is acked.
 	if (tp->undo_marker && !tp->undo_retrans)
 	{
 		DBGUNDO(sk, "D-SACK");
@@ -2596,30 +2676,66 @@ static inline void tcp_complete_cwr(struct sock *sk)
 	tcp_ca_event(sk, CA_EVENT_COMPLETE_CWR);
 }
 
+//This routine checks if we need to enter into the CWR state or the disorder state.
+//We are called only in open, C(ongestion)W(indow)R(eduction), and disorder TCP states.
 static void tcp_try_to_open(struct sock *sk, int flag)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	tcp_verify_left_out(tp);
 
+	//If tp->retrans_out is set to zero, tp->retrans_stamp is set to zero.
+	//It may happen that we have left the congestion state without undoing from the state. 
+	//If we come here just after entering the open state from the congestion state, we will 
+	//try to reset tp->retrans_stamp in case tp->retrans_out is set to zero We
+	//enter into the open state from the congestion state only after all the retransmitted
+	//segments are ACKed. So, tp→retrans_out should become zero. In such cases, we
+	//should try to reset tp→retrans_stamp because it records the timestamp of the first
+	//retransmitted segment. If we don ’ t do this here, and the very next instance we need
+	//to retransmit the segment, we will still have the older value in tp→retrans_stamp
+	//and will not set the new value (check tcp_retransmit_skb()). This may provide us wrong 
+	//results in case we are detecting false retransmissions in tcp_may_undo(). tp->retrans_stamp 
+	//is useful to check false retransmission
 	if (tp->retrans_out == 0)
 		tp->retrans_stamp = 0;
 
+	//if ECE flag is set, we enter into the CWR state 
+	//This is the place where we can enter into the CWR state in case we received an ECE flag set 
+	//in the packet being processed currently.
 	if (flag&FLAG_ECE)
 		tcp_enter_cwr(sk, 1);
 
+	//we are here only in three TCP states: TCP_CA_Open, TCP_CA_CWR, and TCP_CA_Disorder.
+	//We may have entered the CWR state in this routine itself because of the ECE flag set.
 	if (inet_csk(sk)->icsk_ca_state != TCP_CA_CWR)
 	{
+		//we are processing either the TCP_CA_Open state or the TCP_CA_Disorder state here.
+	
 		int state = TCP_CA_Open;
 
+		//1.If we have entered tcp_fastretrans_alert() in the open state, it may be because we received 
+		//the first duplicate ACK. In such cases, tcp_left_out() will be a nonzero positive number 
+		//because it is set to the number of SACKed-out segments. In Reno implementation, SACKed-out 
+		//segments are emulated as duplicate ACKs.
+		//We may have entered tcp_fastretrans_alert() with the TCP state as a loss and have just left
+		//these states (because tp->high_seq is ACKed with this segment). In this case, if we are not 
+		//able to undo from the congestion states, tp->undo_retrans and tp->undo_marker will still be 
+		//set to the congestion state value.
+		//In both of the above cases, we just set the TCP state to disorder 
+		//2.In the case where we are already in the disorder state and received an ACK, we just call 
+		//tcp_moderate_window() to bring down the transmission rate and do nothing.
 		if (tcp_left_out(tp) || tp->retrans_out || tp->undo_marker)
 			state = TCP_CA_Disorder;
 
 		if (inet_csk(sk)->icsk_ca_state != state) 
 		{
+			//can only be a disorder state, We set the state to the disorder state
 			tcp_set_ca_state(sk, state);
 			tp->high_seq = tp->snd_nxt;
 		}
+		//slow down the rate of transmission.
+		//we actually restrict ourselves to sending out a maximum of three new segments from here. 
+		//This way we enter into the disorder state
 		tcp_moderate_cwnd(tp);
 	} 
 	else 
@@ -2673,7 +2789,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	int is_dupack = !(flag&(FLAG_SND_UNA_ADVANCED|FLAG_NOT_DUP));
-	int do_lost = is_dupack || ((flag&FLAG_DATA_SACKED) && (tp->fackets_out > tp->reordering));
+	int do_lost = is_dupack || ((flag & FLAG_DATA_SACKED) && (tp->fackets_out > tp->reordering));
 
 	/* Some technical things:
 	 * 1. Reno does not count dupacks (sacked_out) automatically. */
@@ -2734,6 +2850,13 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 	tcp_verify_left_out(tp);
 
 	/* E. Check state exit conditions. State can be terminated when high_seq is ACKed. */
+
+	//In the open state since there are no retransmissions, we need
+	//not have the tp→retrans_stamp set. So, we reset it here
+	//This is important because we may be sensing congestion and may need to retransmit segments.
+	//If tp→retrans_stamp is set, we won ’ t be able to record retransmission timestamp for
+	//our first retransmission (check tcp_retransmit_skb()) and this will mislead us in
+	//detecting false retransmissions.
 	if (icsk->icsk_ca_state == TCP_CA_Open) 
 	{
 		BUG_TRAP(tp->retrans_out == 0);
@@ -2818,20 +2941,26 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		/* Loss is undone; fall through to processing in Open state. */
 	default:
 		//We come here in case TCP has entered any of the congestion state and we received got an ACK for data
-		//that are below tp?high_seq (recorded at the time when we entered congestion state) under different 
-		//conditions for each TCP state. 
-		//We also enter here in case we are in the OPEN state and we received a first duplicate ACK. 
-	
+		//that are below tp->high_seq (recorded at the time when we entered congestion state) under different 
+		//conditions for each TCP state. We also enter here in case we are in the OPEN state and we received a
+		//first duplicate ACK. 
+
+		//In case it is Reno implementation
 		if (tcp_is_reno(tp)) 
 		{
-			//n case we have ACKed new data, we need to reset Reno SACK counters. 
+			//Linux TCP implementation simulates SACK for SACKless Reno implementation in the following way:
+			//In case we have ACKed new data, we need to reset Reno SACK counters. 
 			if (flag & FLAG_SND_UNA_ADVANCED)
 				tcp_reset_reno_sack(tp);
-			//we need to update the Reno SACK in case we have received a duplicate ACK.
+			//In case we have received a duplicate ACK, we need to update the Reno SACK 
+			//Since Reno implementation has no idea which segment has reached the receiver out-of-order, it just 
+			//increments the SACK counter on reception of every consecutive duplicate ACK 
 			if (is_dupack)
 				tcp_add_reno_sack(sk);
 		}
 
+		//check if we can undo from disorder state (TCP_CA_Disorder), which means that we have just sensed 
+		//reordering but have not entered the recovery state.
 		if (icsk->icsk_ca_state == TCP_CA_Disorder)
 			tcp_try_undo_dsack(sk);
 
@@ -2843,6 +2972,8 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 			tcp_try_to_open(sk, flag);
 			return;
 		}
+
+		//we are entering into a fast-retransmit fast-recovery state (TCP_CA_Recovery). 
 
 		/* MTU probe failure: don't reduce cwnd */
 		if (icsk->icsk_ca_state < TCP_CA_CWR &&
@@ -2867,13 +2998,25 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		//tp->prior_ssthresh is reset here because we set it once again only if we have not received congestion notification. 
 		tp->prior_ssthresh = 0;
 		tp->undo_marker = tp->snd_una;
+		//tp->retrans_out may be set while entering the recovery state in case we have undone from the loss state because of
+		//duplicate ACKs generated as a result of an out-of-order segment from the window that got us into the congestion 
+		//state. Or we may have exited the loss state on reception of a partial ACK from the original transmission, and we can 
+		//catch DSACKs from this window now.
 		tp->undo_retrans = tp->retrans_out;
 
 		if (icsk->icsk_ca_state < TCP_CA_CWR) 
 		{
 			if (!(flag&FLAG_ECE))
+			{
+				//This is recorded so that we can revert to these values in case we are able to undo from this state (false
+				//entry into congestion state by calling tcp_undo_cwr()). 
 				tp->prior_ssthresh = tcp_current_ssthresh(sk);
+			}
+
+			// bring down the value of the slow - start threshold, which is standard practice. 
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
+			//Call TCP_ECN_queue_cwr() to set the TCP_ECN_QUEUE_CWR flag, ensuring that we send out the CWR bit with the new 
+			//data segment to inform the other end that we have a reduced congestion window.
 			TCP_ECN_queue_cwr(tp);
 		}
 
@@ -2882,9 +3025,20 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		tcp_set_ca_state(sk, TCP_CA_Recovery);
 	}
 
+	//We are here if we have just entered the recovery state or we received a partial or duplicate ACK in the recovery state. 
+	//In the next step we will see how we mark lost segments, and then we will learn how we select segments to be retransmitted
+
+	//We call tcp_update_scoreboard() to update lost segments within the window in two cases:
+	//1.
+	//2.In the case where the head of the segment has timed out and tcp_head_timedout() returns TRUE
 	if (do_lost || tcp_head_timedout(sk))
+	{
+	
 		tcp_update_scoreboard(sk);
+	}
+		
 	tcp_cwnd_down(sk, flag);
+	//initiate retransmission of the segments marked as lost. We may also do forward retransmissions here.
 	tcp_xmit_retransmit_queue(sk);
 }
 

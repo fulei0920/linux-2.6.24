@@ -331,17 +331,18 @@ TCP_ECN_make_synack(struct request_sock *req, struct tcphdr *th)
 		th->ece = 1;
 }
 
-static inline void TCP_ECN_send(struct sock *sk, struct sk_buff *skb,
-				int tcp_header_len)
+static inline void TCP_ECN_send(struct sock *sk, struct sk_buff *skb, int tcp_header_len)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
 	if (tp->ecn_flags & TCP_ECN_OK) {
 		/* Not-retransmitted data segment: set ECT and inject CWR. */
 		if (skb->len != tcp_header_len &&
-		    !before(TCP_SKB_CB(skb)->seq, tp->snd_nxt)) {
+		    !before(TCP_SKB_CB(skb)->seq, tp->snd_nxt))
+		{
 			INET_ECN_xmit(sk);
-			if (tp->ecn_flags&TCP_ECN_QUEUE_CWR) {
+			if (tp->ecn_flags&TCP_ECN_QUEUE_CWR) 
+			{
 				tp->ecn_flags &= ~TCP_ECN_QUEUE_CWR;
 				tcp_hdr(skb)->cwr = 1;
 				skb_shinfo(skb)->gso_type |= SKB_GSO_TCP_ECN;
@@ -600,7 +601,9 @@ static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it, 
 				      md5 ? &md5_hash_location :
 #endif
 				      NULL);
-	} else {
+	}
+	else 
+	{
 		tcp_build_and_update_options((__be32 *)(th + 1),
 					     tp, tcb->when,
 #ifdef CONFIG_TCP_MD5SIG
@@ -1191,10 +1194,11 @@ int tcp_may_send_now(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct sk_buff *skb = tcp_send_head(sk);
 
+	//ensure that there send_head is non-NULL and that all other conditions are also
+	//satisfied related to Nagles, algorithm, the congestion window, and the receiver ¡¯ s
+	//window. 
 	return (skb &&
-		tcp_snd_test(sk, skb, tcp_current_mss(sk, 1),
-			     (tcp_skb_is_last(sk, skb) ?
-			      tp->nonagle : TCP_NAGLE_PUSH)));
+		tcp_snd_test(sk, skb, tcp_current_mss(sk, 1), (tcp_skb_is_last(sk, skb) ? tp->nonagle : TCP_NAGLE_PUSH)));
 }
 
 /* Trim TSO SKB to LEN bytes, put the remaining data into a new packet
@@ -1990,17 +1994,22 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	struct sk_buff *skb;
 	int packet_cnt;
 
-	if (tp->retransmit_skb_hint) {
+	if (tp->retransmit_skb_hint) 
+	{
 		skb = tp->retransmit_skb_hint;
 		packet_cnt = tp->retransmit_cnt_hint;
-	}else{
+	}
+	else
+	{
 		skb = tcp_write_queue_head(sk);
 		packet_cnt = 0;
 	}
 
 	/* First pass: retransmit lost packets. */
-	if (tp->lost_out) {
-		tcp_for_write_queue_from(skb, sk) {
+	if (tp->lost_out)
+	{
+		tcp_for_write_queue_from(skb, sk) 
+		{
 			__u8 sacked = TCP_SKB_CB(skb)->sacked;
 
 			if (skb == tcp_send_head(sk))
@@ -2016,13 +2025,28 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			 * packet to be MSS sized and all the
 			 * packet counting works out.
 			 */
+			// Check if the congestion window is greater than packets in flight 
+			//If so, we can pump out more segments in the network; otherwise we
+			//return.
 			if (tcp_packets_in_flight(tp) >= tp->snd_cwnd)
 				return;
 
+			// Check if the segment is marked lost. If it is marked lost, we try to retransmit 
+			//this segment only if the segment is not yet SACKed or retransmitted. If the error 
+			//code returned from tcp_retransmit_skb() is nonzero, there was some problem and the 
+			//segment could not be retransmitted. In that case, we just return and don't try for 
+			//the second time. In case we are able to retransmit the segment and this was the first 
+			//segment in the write queue, we reset the retransmit timer, the same as we do for plane 
+			//transmission of a segment where we set the retransmit timer for the first segment and 
+			//we reset the retransmit timer once some data gets ACKed. Next is to decrement the lost
+			//segment count. If the count is zero, we come out of the loop; otherwise we traverse in 
+			//the loop for the next segment.
 			if (sacked & TCPCB_LOST) 
 			{
-				if (!(sacked&(TCPCB_SACKED_ACKED|TCPCB_SACKED_RETRANS))) {
-					if (tcp_retransmit_skb(sk, skb)) {
+				if (!(sacked&(TCPCB_SACKED_ACKED|TCPCB_SACKED_RETRANS))) 
+				{
+					if (tcp_retransmit_skb(sk, skb))
+					{
 						tp->retransmit_skb_hint = NULL;
 						return;
 					}
@@ -2043,12 +2067,25 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	}
 
 	/* OK, demanded retransmission is finished. */
+	//The above was retransmission on demand, and now we check for the possibility
+	//of forward retransmission ¡ª that is, those segments that are not yet SACK/
+	//retransmitted/lost. Here we also have the choice of transmitting new data segments
+	//that are not yet transmitted. 
 
-	/* Forward retransmissions are possible only during Recovery. */
+	/* Forward retransmissions are possible only during Recovery state and not in the Loss state*/
+	//The reason for this is that the loss state indicates acute congestion as packets are getting dropped by
+	//some intermediate router and we assume that all the segments in the window being
+	//lost. So we want to transmit very limited segments in a controlled way in a loss state.
+	//Another reason is that we may expect original retransmissions reaching the receiver,
+	//causing partial ACKing or duplicate ACKs that may get us out of the loss state.
+	//One more reason we keep retransmitting slowly is that we may have entered the
+	//loss state because of false retransmissions.
 	if (icsk->icsk_ca_state != TCP_CA_Recovery)
 		return;
 
 	/* No forward retransmissions in Reno are possible. */
+	//We are an eligible candidate for forward retransmission only if SACK is implemented, else return (line 951). The reason for this is that we have a fair idea of which
+	//segments to transmit and have controlled retransmissions with SACK in place.
 	if (tcp_is_reno(tp))
 		return;
 
@@ -2059,9 +2096,16 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	 * segments to send. In the other cases, follow rule 3 for
 	 * NextSeg() specified in RFC3517.
 	 */
+	//While in forward retransmission, Linux has a choice of retransmitting un -
+	//ACKed segments from the current window or transmitting new segment. Linux
+	//prefers transmitting new data segments once it has retransmitted marked lost segments in case congestion window allows.
 
+	//First we check if there are any new segments to be transmitted 
 	if (tcp_may_send_now(sk))
 		return;
+
+	//If for any reason we are not able to transmit a new segment, try to retransmit segments from the 
+	//retransmit queue which are not marked as Lost/Sack/retransmitted.
 
 	/* If nothing is SACKed, highest_sack in the loop won't be valid */
 	if (!tp->sacked_out)
@@ -2072,11 +2116,14 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	else
 		skb = tcp_write_queue_head(sk);
 
-	tcp_for_write_queue_from(skb, sk) {
+	tcp_for_write_queue_from(skb, sk) 
+	{
 		if (skb == tcp_send_head(sk))
 			break;
+		
 		tp->forward_skb_hint = skb;
 
+		//we look for the possibility of transmitting segments that are covered by FACKed - out segments
 		if (after(TCP_SKB_CB(skb)->seq, tp->highest_sack))
 			break;
 
@@ -2087,7 +2134,8 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			continue;
 
 		/* Ok, retransmit it. */
-		if (tcp_retransmit_skb(sk, skb)) {
+		if (tcp_retransmit_skb(sk, skb))
+		{
 			tp->forward_skb_hint = NULL;
 			break;
 		}

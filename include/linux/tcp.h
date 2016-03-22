@@ -114,6 +114,9 @@ enum tcp_ca_state
 	//状态就是当第一次由于收到SACK或者重复的ack而检测到拥塞时，就进入这个状态
 	//当检测到duplicate ack或者是SACK时，进入此状态。在此状态下拥塞窗口不调整，没收到一个数据包都触发一个新的数据包的发送。
 	//此时，TCP会使用一些启发式方法判断是不是真的发生了包的丢失。
+	//The TCP disorder state indicates that packets are getting reordered in the network or we may have just
+	//recovered from the congestion state but are not yet completely undone. Before entering into the recovery 
+	//state, we always first enter into the disorder state. The disorder state is an initial indication of congestion
 	TCP_CA_Disorder = 1,
 #define TCPF_CA_Disorder (1<<TCP_CA_Disorder)
 
@@ -473,11 +476,12 @@ struct tcp_sock
 	//一般在拥塞状态没有撤销或没有进入Loss状态时，在重传队列中，缓存上一次标记记分牌未丢失的最后一个段，
 	//主要为了加速对重传队列的标记操作。
 	struct sk_buff* lost_skb_hint;
+	
 	//一般在拥塞状态没有撤销或没有进入Loss状态时，在重传队列中，记录上一次标记记分牌未丢失的最后一个SKB，
 	//主要为了加速对重传队列的标记操作。
 	struct sk_buff *scoreboard_skb_hint;
 
-	//用于记录当前重传的位置。
+	//用于记录上次重传的位置。
 	//retransmit_skb_hint位置之前的段经过了重传，当认为重传的段也已经丢失，则将其设置为NULL，这样重传
 	//又从sk_write_queue开始，即使该段并未真正丢失。
 	//重新排序也正是这个意思，这与系统参数sysctl_tcp_reordering也有着密切关系
@@ -517,6 +521,7 @@ struct tcp_sock
 	//distinguishes different algorithms.
 	//an estimation of the number of segments lost in the network.
 	//网络中丢失的数据包的计数，是一个估计值，取决于具体实现
+	//tp->lost_out is incremented in tcp_mark_head_lost() even if we are in a disorder state or an open state.
 	u32	lost_out;	
 	//Packets, which arrived to receiver out of order and hence not ACKed. With SACKs this number is simply
 	//amount of SACKed data. Even without SACKs it is easy to give pretty reliable estimate of this number,

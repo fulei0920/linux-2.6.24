@@ -373,6 +373,7 @@ void tcp_reno_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int flag)
 EXPORT_SYMBOL_GPL(tcp_reno_cong_avoid);
 
 /* Slow start threshold is half the congestion window (min 2) */
+//We set the slow-start threshold to half of the congestion window or 2, whichever is maximum.
 u32 tcp_reno_ssthresh(struct sock *sk)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
