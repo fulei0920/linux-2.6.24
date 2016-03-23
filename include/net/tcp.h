@@ -341,6 +341,7 @@ static inline void tcp_clear_options(struct tcp_options_received *rx_opt)
 //标识发送方由于收到显示拥塞通知而进入拥塞状态
 #define	TCP_ECN_QUEUE_CWR	2
 //标识接收到的段经历了拥塞
+//it means that the receiver is demanding a CWR bit in the TCP header
 #define	TCP_ECN_DEMAND_CWR	4
 
 static __inline__ void

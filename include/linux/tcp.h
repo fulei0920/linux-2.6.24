@@ -538,7 +538,7 @@ struct tcp_sock
 
 	//记录发生拥塞时的最大的发送序号(snd_nxt)， 标识重传队列的尾部
 	//tp->high_seq is set to the highest sequence number that has been
-	//transmitted at that point of time when we enter loss or recovery state.
+	//transmitted at that point of time when we enter loss or recovery (cwr) state.
 	u32	high_seq;	
 
 	//在主动连接时，记录第一个SYN段的发送时间，用来检测ACK序号是否回绕

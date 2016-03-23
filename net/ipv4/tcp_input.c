@@ -254,7 +254,8 @@ static inline void TCP_ECN_withdraw_cwr(struct tcp_sock *tp)
 
 static inline void TCP_ECN_check_ce(struct tcp_sock *tp, struct sk_buff *skb)
 {
-	if (tp->ecn_flags&TCP_ECN_OK) {
+	if (tp->ecn_flags&TCP_ECN_OK)
+	{
 		if (INET_ECN_is_ce(TCP_SKB_CB(skb)->flags))
 			tp->ecn_flags |= TCP_ECN_DEMAND_CWR;
 		/* Funny extension: if ECT is not set on a segment,
@@ -887,6 +888,7 @@ __u32 tcp_init_cwnd(struct tcp_sock *tp, struct dst_entry *dst)
 }
 
 /* Set slow start threshold and cwnd not falling to slow start */
+//enter into the TCP_CA_CWR state 
 void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -902,6 +904,9 @@ void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 		if (set_ssthresh)
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
 		//the send congestion window is reduced to a value so that we should be able to send a maximum of one segment.
+		//we adjust the congestion window to a minimum of current congestion window and (packets
+		//in flight + 1), which means that at the most we can send only one new segment until
+		//segments in flight are ACKed.
 		tp->snd_cwnd = min(tp->snd_cwnd, tcp_packets_in_flight(tp) + 1U);
 		tp->snd_cwnd_cnt = 0;
 		tp->high_seq = tp->snd_nxt;
@@ -2513,6 +2518,7 @@ static void tcp_undo_cwr(struct sock *sk, const int undo)
 	tcp_clear_all_retrans_hints(tp);
 }
 
+//check if we did false retransmission because of underestimated RTO or packets getting late in the flight 
 static inline int tcp_may_undo(struct tcp_sock *tp)
 {
 	//1. the packet got delayed and reached the receiver before the 
@@ -2537,6 +2543,7 @@ static int tcp_try_undo_recovery(struct sock *sk)
 		 * or our original transmission succeeded.
 		 */
 		DBGUNDO(sk, inet_csk(sk)->icsk_ca_state == TCP_CA_Loss ? "loss" : "retrans");
+		//undo from the state
 		//The routine reverts the congestion variables back to the value that was set prior to entering congestion state
 		tcp_undo_cwr(sk, 1);
 		if (inet_csk(sk)->icsk_ca_state == TCP_CA_Loss)
@@ -2869,7 +2876,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		{
 		case TCP_CA_Loss:
 			icsk->icsk_retransmits = 0;
-			//check if we did false retransmission because of underestimated RTO or packets getting late in the flight
+			
 			if (tcp_try_undo_recovery(sk))
 				return;
 			break;

@@ -335,8 +335,11 @@ static inline void TCP_ECN_send(struct sock *sk, struct sk_buff *skb, int tcp_he
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	if (tp->ecn_flags & TCP_ECN_OK) {
+	if (tp->ecn_flags & TCP_ECN_OK)
+	{
 		/* Not-retransmitted data segment: set ECT and inject CWR. */
+
+		//Check if the new data segment is being transmitted
 		if (skb->len != tcp_header_len &&
 		    !before(TCP_SKB_CB(skb)->seq, tp->snd_nxt))
 		{
@@ -347,7 +350,9 @@ static inline void TCP_ECN_send(struct sock *sk, struct sk_buff *skb, int tcp_he
 				tcp_hdr(skb)->cwr = 1;
 				skb_shinfo(skb)->gso_type |= SKB_GSO_TCP_ECN;
 			}
-		} else {
+		} 
+		else 
+		{
 			/* ACK or retransmitted segment: clear ECT|CE */
 			INET_ECN_dontxmit(sk);
 		}
@@ -1856,7 +1861,8 @@ void tcp_simple_retransmit(struct sock *sk)
 	 * in network, but units changed and effective
 	 * cwnd/ssthresh really reduced now.
 	 */
-	if (icsk->icsk_ca_state != TCP_CA_Loss) {
+	if (icsk->icsk_ca_state != TCP_CA_Loss) 
+	{
 		tp->high_seq = tp->snd_nxt;
 		tp->snd_ssthresh = tcp_current_ssthresh(sk);
 		tp->prior_ssthresh = 0;
