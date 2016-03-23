@@ -896,6 +896,7 @@ void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 
 	tp->prior_ssthresh = 0;
 	tp->bytes_acked = 0;
+	//we enter into the TCP_CA_CWR state,in case we are in an open state or a disorder state but not in any other TCP state
 	if (icsk->icsk_ca_state < TCP_CA_CWR) 
 	{
 		//tp->undo_marker is not set because we are sure that we are not retransmitting anything in this state
@@ -2710,7 +2711,7 @@ static void tcp_try_to_open(struct sock *sk, int flag)
 	//if ECE flag is set, we enter into the CWR state 
 	//This is the place where we can enter into the CWR state in case we received an ECE flag set 
 	//in the packet being processed currently.
-	if (flag&FLAG_ECE)
+	if (flag & FLAG_ECE)
 		tcp_enter_cwr(sk, 1);
 
 	//we are here only in three TCP states: TCP_CA_Open, TCP_CA_CWR, and TCP_CA_Disorder.
@@ -2720,6 +2721,20 @@ static void tcp_try_to_open(struct sock *sk, int flag)
 		//we are processing either the TCP_CA_Open state or the TCP_CA_Disorder state here.
 	
 		int state = TCP_CA_Open;
+
+		//we enter the disorder state in two cases in routine tcp_try_to_open():
+		//1. From the open state when we receive first the duplicate ACK.
+		//2. When we exit the congestion state (loss) and enter the open state on ACKing 
+		//tp->high_seq but without undoing from congestion. This means that tp->
+		//undo_retrans and tp->undo_marker are set with a TCP open state, which
+		//means that we are not reverting back to the congestion state prior to entering
+		//the congestion. With SACK implementation, we can still get DSACK for the
+		//retransmissions which will indicate if the congestion state was entered
+		//incorrectly.
+		//In the latter case, we know that retransmissions are still there in the flight and can
+		//expect them in the form of DSACK. So, in case we get ACK for tp->high_seq in
+		//the disorder state, we call tcp_try_undo_dsack() to check if we received
+		//DSACK that clears off tp->undo_retrans field.
 
 		//1.If we have entered tcp_fastretrans_alert() in the open state, it may be because we received 
 		//the first duplicate ACK. In such cases, tcp_left_out() will be a nonzero positive number 
@@ -2884,6 +2899,9 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		case TCP_CA_CWR:
 			/* CWR is to be held something *above* high_seq
 			 * is ACKed for CWR bit to reach receiver. */
+			 //We don't leave this state until something higher than tp->high_seq (recorded at the time of entering TCP CWR state) is ACKed.
+			 //We need to wait for anything above tp->high_seq to be ACKed in order to make sure that the CWR bit has reached the receiver. 
+			 //The CWR bit is sent in the very next new segment after we have received an ECE bit from the receiver. 
 			if (tp->snd_una != tp->high_seq)
 			{
 				tcp_complete_cwr(sk);
@@ -2893,10 +2911,19 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 
 		case TCP_CA_Disorder:
 			tcp_try_undo_dsack(sk);
+			//If we have entered the disorder state from the open state without tp?undo_marker
+			//set (reception of the first duplicate ACK) or call to tcp_try_undo_dsack() might
+			//have cleared tp?undo_marker. In the case where tp?undo_marker is set, we can
+			//still enter the open state in case this is Reno implementation because we have
+			//nothing like DSACK to catch. Still we can undo from the disorder state in the case
+			//where SACK is implemented and we have ACKed something above tp?high_seq
+			//because this makes sure that all the data from the window at the time of entering
+			//the congestion state have reached the receiver properly. 
 			if (!tp->undo_marker ||
 			    /* For SACK case do not Open to allow to undo
 			     * catching for all duplicate ACKs. */
-			    tcp_is_reno(tp) || tp->snd_una != tp->high_seq) {
+			    tcp_is_reno(tp) || tp->snd_una != tp->high_seq)
+			{
 				tp->undo_marker = 0;
 				tcp_set_ca_state(sk, TCP_CA_Open);
 			}

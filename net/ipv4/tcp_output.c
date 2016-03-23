@@ -340,8 +340,7 @@ static inline void TCP_ECN_send(struct sock *sk, struct sk_buff *skb, int tcp_he
 		/* Not-retransmitted data segment: set ECT and inject CWR. */
 
 		//Check if the new data segment is being transmitted
-		if (skb->len != tcp_header_len &&
-		    !before(TCP_SKB_CB(skb)->seq, tp->snd_nxt))
+		if (skb->len != tcp_header_len && !before(TCP_SKB_CB(skb)->seq, tp->snd_nxt))
 		{
 			INET_ECN_xmit(sk);
 			if (tp->ecn_flags&TCP_ECN_QUEUE_CWR) 
@@ -356,6 +355,7 @@ static inline void TCP_ECN_send(struct sock *sk, struct sk_buff *skb, int tcp_he
 			/* ACK or retransmitted segment: clear ECT|CE */
 			INET_ECN_dontxmit(sk);
 		}
+		
 		if (tp->ecn_flags & TCP_ECN_DEMAND_CWR)
 			tcp_hdr(skb)->ece = 1;
 	}
@@ -592,7 +592,8 @@ static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it, 
 		th->urg			= 1;
 	}
 
-	if (unlikely(tcb->flags & TCPCB_FLAG_SYN)) {
+	if (unlikely(tcb->flags & TCPCB_FLAG_SYN)) 
+	{
 		tcp_syn_build_options((__be32 *)(th + 1),
 				      tcp_advertise_mss(sk),
 				      (sysctl_flags & SYSCTL_FLAG_TSTAMPS),
