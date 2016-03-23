@@ -2537,6 +2537,7 @@ static int tcp_try_undo_recovery(struct sock *sk)
 		 * or our original transmission succeeded.
 		 */
 		DBGUNDO(sk, inet_csk(sk)->icsk_ca_state == TCP_CA_Loss ? "loss" : "retrans");
+		//The routine reverts the congestion variables back to the value that was set prior to entering congestion state
 		tcp_undo_cwr(sk, 1);
 		if (inet_csk(sk)->icsk_ca_state == TCP_CA_Loss)
 			NET_INC_STATS_BH(LINUX_MIB_TCPLOSSUNDO);
@@ -2868,6 +2869,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		{
 		case TCP_CA_Loss:
 			icsk->icsk_retransmits = 0;
+			//check if we did false retransmission because of underestimated RTO or packets getting late in the flight
 			if (tcp_try_undo_recovery(sk))
 				return;
 			break;

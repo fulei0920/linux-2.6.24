@@ -101,6 +101,7 @@ struct inet_connection_sock
 	//表示拥塞控制的状态
 	__u8			  icsk_ca_state;
 	//记录超时重传的次数
+	//number of attempts to retransmit the same segment without getting ACK
 	__u8			  icsk_retransmits;	
 	///指定当前icsk_retransmit_timer定时器类型是ICSK_TIME_RETRANS还是ICSK_TIME_PROBE0
 	__u8			  icsk_pending;		
