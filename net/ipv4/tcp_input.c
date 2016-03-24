@@ -2046,8 +2046,7 @@ void tcp_enter_loss(struct sock *sk, int how)
 
 	if (!how)
 	{
-		/* Push undo marker, if it was plain RTO and nothing
-		 * was retransmitted. */
+		/* Push undo marker, if it was plain RTO and nothing was retransmitted. */
 		tp->undo_marker = tp->snd_una;
 		tcp_clear_retrans_hints_partial(tp);
 	} 
@@ -2063,7 +2062,7 @@ void tcp_enter_loss(struct sock *sk, int how)
 		if (skb == tcp_send_head(sk))
 			break;
 
-		if (TCP_SKB_CB(skb)->sacked&TCPCB_RETRANS)
+		if (TCP_SKB_CB(skb)->sacked & TCPCB_RETRANS)
 			tp->undo_marker = 0;
 		
 		TCP_SKB_CB(skb)->sacked &= (~TCPCB_TAGBITS)|TCPCB_SACKED_ACKED;
@@ -2443,8 +2442,7 @@ static void tcp_cwnd_down(struct sock *sk, int flag)
 	struct tcp_sock *tp = tcp_sk(sk);
 	int decr = tp->snd_cwnd_cnt + 1;
 
-	if ((flag&(FLAG_ANY_PROGRESS|FLAG_DSACKING_ACK)) ||
-	    (tcp_is_reno(tp) && !(flag&FLAG_NOT_DUP)))
+	if ((flag&(FLAG_ANY_PROGRESS|FLAG_DSACKING_ACK)) || (tcp_is_reno(tp) && !(flag&FLAG_NOT_DUP)))
 	{
 		tp->snd_cwnd_cnt = decr&1;
 		decr >>= 1;
@@ -2918,7 +2916,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 
 	/* Now state machine starts.
 	 * A. ECE, hence prohibit cwnd undoing, the reduction is required. */
-	// congestion that is sensed by by one of the intermediate routers (not ACK),  
+	//congestion that is sensed by by one of the intermediate routers (not ACK),  
 	//avoid increasing the congestion window to a very high value when undo from 
 	//a non-open state,  tcp_undo_cwr();
 	if (flag & FLAG_ECE)

@@ -554,6 +554,7 @@ struct tcp_sock
 	///超时重传或FRTO时记录的snd_una
 	//set to tp->snd_una when we enter the recovery phase and retransmit data,
 	//this is set to unACKed sequence number (tp->snd_una) when we enter the congestion state. 
+	//如果为0，表示。。。
 	u32	undo_marker;	/* tracking retrans started here. */
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。
