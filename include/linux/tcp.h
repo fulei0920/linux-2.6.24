@@ -112,7 +112,7 @@ enum tcp_ca_state
 #define TCPF_CA_Open	(1<<TCP_CA_Open)
 	//
 	//状态就是当第一次由于收到SACK或者重复的ack而检测到拥塞时，就进入这个状态
-	//当检测到duplicate ack或者是SACK时，进入此状态。在此状态下拥塞窗口不调整，没收到一个数据包都触发一个新的数据包的发送。
+	//当检测到duplicate ack或者是SACK时，进入此状态。在此状态下拥塞窗口不调整，每收到一个数据包都触发一个新的数据包的发送。
 	//此时，TCP会使用一些启发式方法判断是不是真的发生了包的丢失。
 	//The TCP disorder state indicates that packets are getting reordered in the network or we may have just
 	//recovered from the congestion state but are not yet completely undone. Before entering into the recovery 
@@ -240,6 +240,7 @@ struct tcp_options_received
 	long	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
 	u32		ts_recent;	/* Time stamp to echo next		*/
 	u32		rcv_tsval;	/* Time stamp value             	*/
+	//the echoed timestamp from the receiver
 	u32		rcv_tsecr;	/* Time stamp echo reply        	*/
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
 			tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
@@ -542,8 +543,9 @@ struct tcp_sock
 	u32	high_seq;	
 
 	//在主动连接时，记录第一个SYN段的发送时间，用来检测ACK序号是否回绕
-	//在数据传输阶段，当发送超时重传时，记录上次重传阶段第一个重传段的发送时间，用来判断是否可以进行拥塞撤销
-	// timestamp of the first retransmission
+	//在数据传输阶段，当发送超时重传时，记录重传阶段过程第一个重传段的发送时间，用来判断是否可以进行拥塞撤销
+	// timestamp of the first retransmission, used to detect false retransmissions
+	//显然retrans_out为0时, retrans_stamp也要为0
 	u32	retrans_stamp;	
 	//在使用F-RTO算法进行发送超时处理，或进入Recovery进行重传，或进入Loss开始慢启动时，
 	//记录当时snd_una，标记重传的起始点。它是检测是否可以进行拥塞撤销的条件之一，
@@ -551,6 +553,7 @@ struct tcp_sock
 	///表示发生重传时的snd_una
 	///超时重传或FRTO时记录的snd_una
 	//set to tp->snd_una when we enter the recovery phase and retransmit data,
+	//this is set to unACKed sequence number (tp->snd_una) when we enter the congestion state. 
 	u32	undo_marker;	/* tracking retrans started here. */
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。
