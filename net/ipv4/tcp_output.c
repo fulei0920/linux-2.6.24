@@ -1002,15 +1002,15 @@ unsigned int tcp_current_mss(struct sock *sk, int large_allowed)
 	if (large_allowed && sk_can_gso(sk) && !tp->urg_mode)
 		doing_tso = 1;
 
-	if (dst) {
+	if (dst)
+	{
 		u32 mtu = dst_mtu(dst);
 		if (mtu != inet_csk(sk)->icsk_pmtu_cookie)
 			mss_now = tcp_sync_mss(sk, mtu);
 	}
 
 	if (tp->rx_opt.eff_sacks)
-		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED +
-			    (tp->rx_opt.eff_sacks * TCPOLEN_SACK_PERBLOCK));
+		mss_now -= (TCPOLEN_SACK_BASE_ALIGNED + (tp->rx_opt.eff_sacks * TCPOLEN_SACK_PERBLOCK));
 
 #ifdef CONFIG_TCP_MD5SIG
 	if (tp->af_specific->md5_lookup(sk, sk))
@@ -1019,7 +1019,8 @@ unsigned int tcp_current_mss(struct sock *sk, int large_allowed)
 
 	xmit_size_goal = mss_now;
 
-	if (doing_tso) {
+	if (doing_tso)
+	{
 		xmit_size_goal = (65535 -
 				  inet_csk(sk)->icsk_af_ops->net_header_len -
 				  inet_csk(sk)->icsk_ext_hdr_len -
@@ -1913,19 +1914,25 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 	    && TCP_SKB_CB(skb)->seq != tp->snd_una)
 		return -EAGAIN;
 
-	if (skb->len > cur_mss) {
+	if (skb->len > cur_mss)
+	{	
+		//In the case where the PMTU has changed and our segment length is more than the
+		//mss, we need to repacketize all the segments
 		if (tcp_fragment(sk, skb, cur_mss, cur_mss))
 			return -ENOMEM; /* We'll try again later. */
 	}
 
 	/* Collapse two adjacent packets if worthwhile and we can. */
-	if (!(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_SYN) &&
-	    (skb->len < (cur_mss >> 1)) &&
-	    (tcp_write_queue_next(sk, skb) != tcp_send_head(sk)) &&
+	//if the segment length of
+	//the retransmitted segment is less than 1 mss, we try to collapse the adjacent segment
+	//with the current segment in question to generate a full - length segment 
+	if (!(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_SYN) &&  //The segment being retransmitted should not be SYN segment.
+	    (skb->len < (cur_mss >> 1)) &&	//The length of the current segment is lesser than half of current mss.
+	    (tcp_write_queue_next(sk, skb) != tcp_send_head(sk)) &&  //The adjacent segment to be merged should not be a new segment; that is, it should be from the retransmit queue.
 	    (!tcp_skb_is_last(sk, skb)) &&
-	    (skb_shinfo(skb)->nr_frags == 0 && skb_shinfo(tcp_write_queue_next(sk, skb))->nr_frags == 0) &&
+	    (skb_shinfo(skb)->nr_frags == 0 && skb_shinfo(tcp_write_queue_next(sk, skb))->nr_frags == 0) &&   //Both segments should not contain any paged data.
 	    (tcp_skb_pcount(skb) == 1 && tcp_skb_pcount(tcp_write_queue_next(sk, skb)) == 1) &&
-	    (sysctl_tcp_retrans_collapse != 0))
+	    (sysctl_tcp_retrans_collapse != 0)) //The system should allow us to collapse the segments; that is, sysctl_tcp_retrans_collapse should be set.
 		tcp_retrans_try_collapse(sk, skb, cur_mss);
 
 	if (inet_csk(sk)->icsk_af_ops->rebuild_header(sk))
@@ -1947,22 +1954,25 @@ int tcp_retransmit_skb(struct sock *sk, struct sk_buff *skb)
 			skb->csum = 0;
 		}
 	}
-
-	/* Make a copy, if the first transmission SKB clone we made
+	
+	/* the timestamp is not retained from the original transmission.
+	 * Make a copy, if the first transmission SKB clone we made
 	 * is still in somebody's hands, else make a clone.
 	 */
 	TCP_SKB_CB(skb)->when = tcp_time_stamp;
 
 	err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
 
-	if (err == 0) {
+	if (err == 0) 
+	{
 		/* Update global TCP statistics. */
 		TCP_INC_STATS(TCP_MIB_RETRANSSEGS);
 
 		tp->total_retrans++;
 
 #if FASTRETRANS_DEBUG > 0
-		if (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS) {
+		if (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS)
+		{
 			if (net_ratelimit())
 				printk(KERN_DEBUG "retrans_out leaked.\n");
 		}

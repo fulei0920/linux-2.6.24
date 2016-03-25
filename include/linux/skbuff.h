@@ -152,7 +152,7 @@ struct skb_shared_info
 	atomic_t	dataref;//数据块的"用户"数目
 	unsigned short	nr_frags;//用于处理IP片段
 	unsigned short	gso_size;
-	/* Warning: this field is not always filled in (UFO)! */
+	/* Warning: this field is not always filled in (UFO -- UDP fragmentation offload)! */
 	unsigned short	gso_segs;
 	unsigned short  gso_type;
 	__be32          ip6_frag_id;

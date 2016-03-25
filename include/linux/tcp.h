@@ -375,7 +375,7 @@ struct tcp_sock
 	//在tcp_process_frto()中处理F-RTO时使用。
 	u32	frto_highmark;	/* snd_nxt when RTO occurred */
 	
-	//在不支持SACK时，为由于连接接受到重复确认而进入快速回复阶段的重复确认数阈值。
+	//在不支持SACK时，为由于连接接受到重复确认而进入快速恢复阶段的重复确认数阈值。
 	//在支持SACK时，在没有确定丢失包的情况下，是TCP流中可以重排序的数据段数
 	//由相关路由缓存项中的reordering度量值或系统参数sysctl_tcp_reordering进行初始化，
 	//更新时会同时更新到目的路由缓存项的reordering度量值中。
@@ -514,7 +514,9 @@ struct tcp_sock
 	u16	advmss;		
 	
 	//在启用FRTO算法的情况下，路径MTU探测成功，进入拥塞控制Disorder、Recovery、Loss状态时保存的ssthresh值。
-	//主要用来在拥塞窗口撤销时，恢复拥塞控制的慢启动阈值。当prior_ssthresh被设置为0时，表示禁止拥塞窗口的撤销。
+	//主要用来在拥塞窗口撤销时，恢复拥塞控制的慢启动阈值。
+	//当prior_ssthresh被设置为0时，	avoid increasing the congestion window to a very high value when undo from 
+	//a non-open state, (tcp_undo_cwr())
 	u16	prior_ssthresh; /* ssthresh saved at recovery start	*/
 	
 	//Packets lost by network. TCP has no explicit "loss notification" feedback from network (for now).
@@ -554,6 +556,7 @@ struct tcp_sock
 	///超时重传或FRTO时记录的snd_una
 	//set to tp->snd_una when we enter the recovery phase and retransmit data,
 	//this is set to unACKed sequence number (tp->snd_una) when we enter the congestion state. 
+	//0 means that we don't want to undo from the congestion state (tcp_may_undo())
 	u32	undo_marker;	/* tracking retrans started here. */
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。

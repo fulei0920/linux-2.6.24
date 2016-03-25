@@ -88,7 +88,7 @@ int sysctl_tcp_sack __read_mostly = 1;
 //标志是否启用FACK拥塞避免与快速重传功能。
 //注意，只有当启用sysctl_tcp_sack时，该系统参数才有效
 int sysctl_tcp_fack __read_mostly = 1;
-//在不支持SACK时，为由于连接接收到重复确认而进入快速回复阶段的重复确认数阈值。
+//在不支持SACK时，为由于连接接收到重复确认而进入快速恢复阶段的重复确认数阈值。
 //在支持SACK时，在没有确定丢失包的情况下，是TCP流中可以重排的数据段数。
 //默认值为3(个)。如果降低此值，可能会导致网络性能变差。
 int sysctl_tcp_reordering __read_mostly = TCP_FASTRETRANS_THRESH;
@@ -1352,7 +1352,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 	//tp->sacked_out is zero which means that none of the segment were SACKed out prior to arrival of this segment
 	if (!tp->sacked_out)			//如果之前没有SACKed的数据， 这是我们第一次获取到sack选项
 	{
-		//we initialize FORWARD ACKed (tp→fackets_out) segment count to 0
+		//we initialize FORWARD ACKed (tp->fackets_out) segment count to 0
 		//The reason is that forward ACKed segments are calculated based on the latest SACK information
 		if (WARN_ON(tp->fackets_out))
 			tp->fackets_out = 0;    	
@@ -1994,7 +1994,6 @@ static void tcp_clear_retrans_partial(struct tcp_sock *tp)
 {
 	tp->retrans_out = 0;
 	tp->lost_out = 0;
-
 	tp->undo_marker = 0;
 	tp->undo_retrans = 0;
 }
@@ -2011,6 +2010,10 @@ void tcp_clear_retrans(struct tcp_sock *tp)
  * and reset tags completely, otherwise preserve SACKs. If receiver
  * dropped its ofo queue, we will know this due to reneging detection.
  */
+
+//Tag the lost segment from the current window and also
+//reduce the rate of transmission of data by performing slow - start 
+
 //进入Loss状态，是否清除SACK标志取决于how，how不为0则清除 
 //how -- 1 means that we want to mark all the segments in the retransmit queue as lost and at the same
 //time we don't initialize tp->undo_marker. tp->undo_marker remains uninitialized, which means that we 
@@ -2025,6 +2028,33 @@ void tcp_enter_loss(struct sock *sk, int how)
 	struct sk_buff *skb;
 
 	/* Reduce ssthresh if it has not yet been made inside this window. */
+	//We do reduce slow-start threshold only if it is not done in the current window.
+	//which means that within a window if multiple losses take place, we won ’ t
+	//reduce the slow - start threshold every time.
+
+	//If the current congestion window caused packet loss, we need to go back to 
+	//the previous congestion window that provided an acceptable rate of
+	//data transmission. So, we divide the current congestion into two halves: The first
+	//half is for slow - start because it was in the previous congestion window, and the
+	//second half is for slow transmission of data (where congestion window is incremented every RTT). 
+	//This will get us better congestion control in the second half
+	//session that got us into trouble. That is the reason we don ’ t decrease slow - start
+	//threshold value twice for the same window. We just start with one congestion
+	//window every time we sense a loss through retransmission timer firing. 
+
+	//icsk->icsk_ca_state <= TCP_CA_Disorder
+	//If we are entering into the loss state from the open | disorder state, we have not yet reduced
+	//the slow-start threshold for the window of data.
+
+	//tp->snd_una == tp->high_seq 
+	//it means that in whatever state we are (other than open | disorder state), all the data from the 
+	//window that got us into the state, prior to retransmission timer expiry, has been acknowledged.
+	//this is a new window 
+
+	//(icsk->icsk_ca_state == TCP_CA_Loss && !icsk->icsk_retransmits)
+	//If we are already in the loss state
+	//and have not yet retransmitted anything. The condition may arise in case we
+	//are not able to retransmit anything because of local congestion.
 	if (icsk->icsk_ca_state <= TCP_CA_Disorder || tp->snd_una == tp->high_seq ||
 	    (icsk->icsk_ca_state == TCP_CA_Loss && !icsk->icsk_retransmits)) 
 	{
@@ -2038,7 +2068,8 @@ void tcp_enter_loss(struct sock *sk, int how)
 	tp->snd_cwnd_stamp = tcp_time_stamp;
 
 	tp->bytes_acked = 0;
-	///清空所有相关的计数器
+	//We clear all the counters related to retransmissions, because we
+	//are going to do fresh calculations in the next step.
 	tcp_clear_retrans_partial(tp);
 
 	if (tcp_is_reno(tp))
@@ -2046,8 +2077,8 @@ void tcp_enter_loss(struct sock *sk, int how)
 
 	if (!how)
 	{
-		/* Push undo marker, if it was plain RTO and nothing
-		 * was retransmitted. */
+		/* Push undo marker, if it was plain RTO and nothing was retransmitted. */
+		// we are eligible for undoing from the loss state.
 		tp->undo_marker = tp->snd_una;
 		tcp_clear_retrans_hints_partial(tp);
 	} 
@@ -2063,13 +2094,15 @@ void tcp_enter_loss(struct sock *sk, int how)
 		if (skb == tcp_send_head(sk))
 			break;
 
-		if (TCP_SKB_CB(skb)->sacked&TCPCB_RETRANS)
+		//why???
+		if (TCP_SKB_CB(skb)->sacked & TCPCB_RETRANS)
 			tp->undo_marker = 0;
-		
+	
+		//清除TCPCB_LOST和TCPCB_SACKED_RETRANS标志位				
 		TCP_SKB_CB(skb)->sacked &= (~TCPCB_TAGBITS)|TCPCB_SACKED_ACKED;
 		
 		//如果how为1,则说明不管sack段，此时标记所有的段为丢失
-		if (!(TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_ACKED) || how)
+		if (!(TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_ACKED) || how)
 		{
 			TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_ACKED;
 			TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
@@ -2081,6 +2114,10 @@ void tcp_enter_loss(struct sock *sk, int how)
 	tp->reordering = min_t(unsigned int, tp->reordering, sysctl_tcp_reordering);
 	tcp_set_ca_state(sk, TCP_CA_Loss);
 	tp->high_seq = tp->snd_nxt;
+	//why???
+	//The next new data segment that the sender
+	//sends will have a CWR bit set in the TCP header informing the receiver that it has
+	//reduced its congestion window.
 	TCP_ECN_queue_cwr(tp);
 	/* Abort F-RTO algorithm if one is in progress */
 	tp->frto_counter = 0;
@@ -2104,10 +2141,15 @@ static int tcp_check_sack_reneging(struct sock *sk)
 	 * Do processing similar to RTO timeout.
 	 */
 	if ((skb = tcp_write_queue_head(sk)) != NULL && (TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_ACKED))
-	{
+	{		
 		struct inet_connection_sock *icsk = inet_csk(sk);
 		NET_INC_STATS_BH(LINUX_MIB_TCPSACKRENEGING);
-
+		//we set the second argument of tcp_enter_loss to 1. 
+		//Because the reason for entering into loss state is entirely different here.
+		//The reason is that whatever out-of-order segments have reached the receiver are discarded by the receiver and we
+		//need to retransmit all the data within the window once again. So, it is not the congestion state 
+		//but the receiver ’ s mismanagement that causes us to enter into the loss
+		//state. So, we cannot undo from the loss state.
 		tcp_enter_loss(sk, 1);
 		icsk->icsk_retransmits++;
 		//Transmit the first segment in the retransmit queue
@@ -2140,7 +2182,7 @@ static inline int tcp_skb_timedout(struct sock *sk, struct sk_buff *skb)
 //segment has elapsed more than RTO (tp->rto) because the retransmit timer is 
 //started only after the ACK for the previous segment was received. When we receive
 //ACK for a segment, we set a retransmission timeout timer for the next segment in
-//tcp_ack()->tcp_ack_packets_out().The timeout value for the retransmission timer
+//tcp_clean_rtx_queue()->tcp_rearm_rto().The timeout value for the retransmission timer
 //is set to tp->rto, even though the next segment was transmitted much earlier. So,
 //timeout for the next segment is slightly overestimated by time lapsed since it was
 //transmitted and the ACK for the previous segment arrived.  We can detect early
@@ -2920,7 +2962,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 	 * A. ECE, hence prohibit cwnd undoing, the reduction is required. */
 	// congestion that is sensed by by one of the intermediate routers (not ACK),  
 	//avoid increasing the congestion window to a very high value when undo from 
-	//a non-open state,  tcp_undo_cwr();
+	//a non-open state, (tcp_undo_cwr())
 	if (flag & FLAG_ECE)
 		tp->prior_ssthresh = 0;
 
@@ -3249,16 +3291,12 @@ static void tcp_rearm_rto(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
-	///为0说明所有的传输的段都已经acked。此时remove定时器。否则重启定时器。
+	//In the case where all the segments are ACKed, we remove retransmit timer .Otherwise we reset timer
+	//This is the only place when we clear retransmit timer since we know that we are not waiting for any more ACKs
 	if (!tp->packets_out)  
-	{		/* 如果网络上没有数据，删除超时重传定时器*/
 		inet_csk_clear_xmit_timer(sk, ICSK_TIME_RETRANS);
-	}
 	else
-	{
-		/* 重置超时重传定时器*/
 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, inet_csk(sk)->icsk_rto, TCP_RTO_MAX);
-	}
 }
 
 /* If we get here, the whole TSO packet has not been acked. */
@@ -3434,6 +3472,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 
 		/* 更新srtt、RTO等RTT相关变量*/  
 		tcp_ack_update_rtt(sk, flag, seq_rtt);
+		
+		//We need to reset a retransmit timer on each ACK we receive that advances a send window
 		tcp_rearm_rto(sk);  /* 重置超时重传定时器*/  
 
 		if (tcp_is_reno(tp)) 
