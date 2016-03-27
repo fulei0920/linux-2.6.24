@@ -22,7 +22,8 @@
 
 #include <linux/module.h>
 #include <net/tcp.h>
-
+//the number of retries allowed to retransmit a SYN
+//segment after which we should give up.
 int sysctl_tcp_syn_retries __read_mostly = TCP_SYN_RETRIES;
 int sysctl_tcp_synack_retries __read_mostly = TCP_SYNACK_RETRIES;
 //在TCP保活打开的情况下，最后一次数据交换到TCP发送第一个保活探测消息的时间，即允许的持续空闲时间。默认值为7200s(2h)
@@ -35,10 +36,28 @@ int sysctl_tcp_keepalive_probes __read_mostly = TCP_KEEPALIVE_PROBES;
 int sysctl_tcp_keepalive_intvl __read_mostly = TCP_KEEPALIVE_INTVL;
 //当重传次数超过此值时，可能遇到了黑洞，因此要检测PMTU是否有效。并清除缓存在传输控制块中的目的路由缓存项，在下次重传时会重新进行路由选择。
 //默认值3(次)，根据RTO的值大约在3s--8min
+//the maximum number of retries after which we need to check
+//if the intermediate router has failed. If the number of retransmits exceeds this value,
+//route - specific negative_advice routine is called (dst→ops→negative_advice()) from
+//dst_negative_advice(). In the case of Ipv4, this is ipv4_negative_advice(), which sets
+//sk→dst to NULL in case the route has become obsolete or the destination has
+//expired. rt_check_expire() is run as a periodic timer for routing entries cached with
+//the kernel to check old not - in - use entries.
 int sysctl_tcp_retries1 __read_mostly = TCP_RETR1;
 //持续定时器周期性发送TCP段或超时重传时，在确定断开TCP连接之前，最多尝试的次数。
 //默认值15(次)，根据RTO的值大约相当于13-30min。RFC1122规定，该值必须大于100s
+//the maximum number of retries the segment should be
+//retransmitted after which we should give up on the connection.
 int sysctl_tcp_retries2 __read_mostly = TCP_RETR2;
+//For an orphaned socket (that is detached from the process context but exists
+//to do some cleanup work), we have some more hard rules for number of retries.
+//The maximum number of retries for an orphaned socket is sysctl_tcp_orphan_retries.
+//Still we need to kill an orphaned socket in two cases even if it has not exhausted
+//its retries (check tcp_out_of_resources()):
+//1. Total number of orphaned sockets has exceeded the system - wide maximum
+//allowed number (sysctl_tcp_max_orphans).
+//2. There is acute memory pressure (tcp_memory_allocated >
+//sysctl_tcp_mem[2]).
 int sysctl_tcp_orphan_retries __read_mostly;
 
 static void tcp_write_timer(unsigned long);
@@ -303,15 +322,14 @@ static void tcp_retransmit_timer(struct sock *sk)
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
-	///如果没有需要确认的段，则什么也不做。  
+	//If no packets are transmitted, just return because we have nothing to retransmit  
 	if (!tp->packets_out)
 		goto out;
 
 	BUG_TRAP(!tcp_write_queue_empty(sk));
-	//首先进行一些合法性判断，其中:  
- 	///snd_wnd为窗口大小。  
- 	///sock_flag用来判断sock的状态。  
- 	//最后一个判断是当前的连接状态不能处于syn_sent和syn_recv状态,也就是连接还未建立状态.  
+
+ 	//we check if the socket is still alive and not in the SYN_SENT/SYN_RECV state 
+ 	//and if somehow the send window is closed
 	if (!tp->snd_wnd && !sock_flag(sk, SOCK_DEAD) && !((1 << sk->sk_state) & (TCPF_SYN_SENT | TCPF_SYN_RECV)))
 	{
 		/* Receiver dastardly shrinks window. Our retransmits
@@ -327,21 +345,29 @@ static void tcp_retransmit_timer(struct sock *sk)
 			       NIPQUAD(inet->daddr), ntohs(inet->dport), inet->num, tp->snd_una, tp->snd_nxt);
 		}
 #endif
+		//we need to timeout the connection in case we have not received
+		//any ACK from the peer for more than TCP_RTO_MAX
 		if (tcp_time_stamp - tp->rcv_tstamp > TCP_RTO_MAX)
 		{
 			tcp_write_err(sk);
 			goto out;
 		}
-		///这个函数用来进入loss状态，也就是进行一些拥塞以及流量的控制。
+		//the socket is not timed out, we enter the loss state
 		tcp_enter_loss(sk, 0);
 		///现在开始重传skb。
 		tcp_retransmit_skb(sk, tcp_write_queue_head(sk));
+		//invalidate the destination
+		//then invalidate the destination by calling __sk_dst_reset(). 
+		//The reason for finding an alternate route
+		//for the connection may be that we are not able to communicate with the peer
+		//because of which we may not be able to get window updates.
 		__sk_dst_reset(sk);
-		///然后重启定时器，继续等待ack的到来。 
+		//we reset the retransmit timer doubling timeout 
 		goto out_reset_timer;
 	}
 
-	//判断我们重传需要的次数。如果超过了重传次数，直接跳转到out。  
+	//判断我们重传需要的次数。如果超过了重传次数，直接跳转到out。 
+	//Check if we have actually exhausted all our retries 
 	if (tcp_write_timeout(sk))
 		goto out;
 
@@ -417,7 +443,7 @@ out_reset_timer:
 	//要注意，重传的时候为了防止确认二义性，使用karn算法，也就是定时器退避策略
 	icsk->icsk_rto = min(icsk->icsk_rto << 1, TCP_RTO_MAX);
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, icsk->icsk_rto, TCP_RTO_MAX);
-	if (icsk->icsk_retransmits > sysctl_tcp_retries1)
+	if (icsk->icsk_retransmits > sysctl_tcp_retries1) 
 		__sk_dst_reset(sk);
 
 out:;
