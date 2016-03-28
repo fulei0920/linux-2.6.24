@@ -22,7 +22,8 @@ static struct tcp_congestion_ops *tcp_ca_find(const char *name)
 {
 	struct tcp_congestion_ops *e;
 
-	list_for_each_entry_rcu(e, &tcp_cong_list, list) {
+	list_for_each_entry_rcu(e, &tcp_cong_list, list)
+	{
 		if (strcmp(e->name, name) == 0)
 			return e;
 	}
@@ -39,9 +40,9 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 	int ret = 0;
 
 	/* all algorithms must implement ssthresh and cong_avoid ops */
-	if (!ca->ssthresh || !ca->cong_avoid) {
-		printk(KERN_ERR "TCP %s does not implement required ops\n",
-		       ca->name);
+	if (!ca->ssthresh || !ca->cong_avoid)
+	{
+		printk(KERN_ERR "TCP %s does not implement required ops\n", ca->name);
 		return -EINVAL;
 	}
 
@@ -85,7 +86,8 @@ void tcp_init_congestion_control(struct sock *sk)
 		rcu_read_lock();
 		list_for_each_entry_rcu(ca, &tcp_cong_list, list) 
 		{
-			if (try_module_get(ca->owner)) {
+			if (try_module_get(ca->owner))
+			{
 				icsk->icsk_ca_ops = ca;
 				break;
 			}

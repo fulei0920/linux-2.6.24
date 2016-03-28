@@ -388,16 +388,22 @@ struct tcp_sock
 
 /* RTT measurement */
 	//平滑的RTT，为了避免浮点运算，是将其放大8倍后存储的
+	//tp→srtt smoothened RTT. On reception of RTT value each time, we calculate
+	//the error based on the srtt and the new value. It is calculated as 7/8(srtt) +
+	//1/8 (new value).
 	u32	srtt;		/* smoothed round trip time << 3	*/
 
 	//RTT平均偏差，由RTT与RTT均值偏差绝对值加权平均而得到
 	//其值越大说明RTT抖动得越厉害
+	// This is the mean deviation in calculation of RTT, and once again
+	//it is calculated as 3/4 (mdev) + 1/4 of new deviation.
 	u32	mdev;	
 	
 	//跟踪每次发送窗口内段被全部确认过程中，RTT平均偏差的最大值，描述RTT抖动的最大范围
 	u32	mdev_max;	/* maximal mdev for the last rtt period	*/
 
 	//平滑的RTT平均偏差，由mdev计算得到，用来计算RTO
+	//tp→rttvar is called a variant in the rtt calculation.
 	u32	rttvar;		/* smoothed mdev_max			*/
 	
 	//记录snd_una，用来在计算RTO时比较snd_una是否被更新了，如果被snd_una更新，则需要同时更新rttvar

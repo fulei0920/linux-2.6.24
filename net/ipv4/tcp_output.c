@@ -1799,7 +1799,7 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 		 * packet counting does not break.
 		 */
 		TCP_SKB_CB(skb)->sacked |= TCP_SKB_CB(next_skb)->sacked&(TCPCB_EVER_RETRANS|TCPCB_AT_TAIL);
-		if (TCP_SKB_CB(next_skb)->sacked&TCPCB_SACKED_RETRANS)
+		if (TCP_SKB_CB(next_skb)->sacked & TCPCB_SACKED_RETRANS)
 			tp->retrans_out -= tcp_skb_pcount(next_skb);
 		if (TCP_SKB_CB(next_skb)->sacked&TCPCB_LOST)
 			tp->lost_out -= tcp_skb_pcount(next_skb);
@@ -1839,7 +1839,8 @@ void tcp_simple_retransmit(struct sock *sk)
 			break;
 		if (skb->len > mss &&
 		    !(TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_ACKED)) {
-			if (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS) {
+			if (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS) 
+			{
 				TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_RETRANS;
 				tp->retrans_out -= tcp_skb_pcount(skb);
 			}
@@ -2060,7 +2061,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			//the loop for the next segment.
 			if (sacked & TCPCB_LOST) 
 			{
-				if (!(sacked&(TCPCB_SACKED_ACKED|TCPCB_SACKED_RETRANS))) 
+				if (!(sacked & (TCPCB_SACKED_ACKED|TCPCB_SACKED_RETRANS))) 
 				{
 					if (tcp_retransmit_skb(sk, skb))
 					{

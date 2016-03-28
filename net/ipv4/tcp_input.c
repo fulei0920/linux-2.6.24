@@ -127,7 +127,7 @@ int sysctl_tcp_abc __read_mostly;
 #define FLAG_WIN_UPDATE		0x02 		/* Incoming ACK was a window update.	*/
 //½ÓÊÕµ½µÄACK¶ÎÈ·ÈÏÁËÐÂµÄÊý¾Ý
 #define FLAG_DATA_ACKED		0x04 		/* This ACK acknowledged new data.		*/
-//±íÊ¾´Ë¶ÎÒÑÖØ´«¹ý
+//½ÓÊÕµ½µÄACK¶ÎÈ·ÈÏÁË±»ÖØ´«¹ýµÄÊý¾Ý
 #define FLAG_RETRANS_DATA_ACKED	0x08 	/* "" "" some of which was retransmitted.	*/
 //½ÓÊÕµÄACK¶ÎÈ·ÈÏÁËSYN¶Î
 #define FLAG_SYN_ACKED		0x10 /* This ACK acknowledged SYN.		*/
@@ -1199,9 +1199,7 @@ static int tcp_mark_lost_retrans(struct sock *sk, u32 received_upto)
 		if (!(TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_RETRANS))
 			continue;
 
-		if (after(received_upto, ack_seq) &&
-		    (tcp_is_fack(tp) ||
-		     !before(received_upto, ack_seq + tp->reordering * tp->mss_cache)))
+		if (after(received_upto, ack_seq) &&  (tcp_is_fack(tp) || !before(received_upto, ack_seq + tp->reordering * tp->mss_cache)))
 		{
 			TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_RETRANS;
 			tp->retrans_out -= tcp_skb_pcount(skb);
@@ -1680,7 +1678,7 @@ tcp_sacktag_write_queue(struct sock *sk, struct sk_buff *ack_skb, u32 prior_snd_
 			 * are accounted above as well.
 			 */
 			 //Èç¹ûskb±»D-SACK£¬²¢ÇÒËüµÄÖØ´«±êÖ¾»¹Î´±»Çå³ý£¬ÄÇÃ´ÏÖÔÚÇå³ý¡£ 
-			if (dup_sack && (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS))
+			if (dup_sack && (TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_RETRANS))
 			{
 				TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_RETRANS;
 				tp->retrans_out -= tcp_skb_pcount(skb);
@@ -1791,7 +1789,7 @@ static void tcp_remove_reno_sacks(struct sock *sk, int acked)
 	{
 		/* One ACK acked hole. The rest eat duplicate ACKs. */
 		/*
-	 ÊÕµ½Õý³£ACK£¬²»ÔÚRecovery×´Ì¬¡£ 
+	 		ÊÕµ½Õý³£ACK£¬²»ÔÚRecovery×´Ì¬¡£ 
          * ÊÕµ½Cummulative ACK£¬È·ÈÏÍêËùÓÐµÄsacked°ü¡£ 
 		*/
 		//If SACK count is n, it means that n segments after one hole has
@@ -1955,7 +1953,8 @@ static void tcp_enter_frto_loss(struct sock *sk, int allowed_segments, int flag)
 		 * Count the retransmission made on RTO correctly (only when
 		 * waiting for the first ACK and did not get it)...
 		 */
-		if ((tp->frto_counter == 1) && !(flag&FLAG_DATA_ACKED)) {
+		if ((tp->frto_counter == 1) && !(flag&FLAG_DATA_ACKED))
+		{
 			/* For some reason this R-bit might get cleared? */
 			if (TCP_SKB_CB(skb)->sacked & TCPCB_SACKED_RETRANS)
 				tp->retrans_out += tcp_skb_pcount(skb);
@@ -3290,6 +3289,9 @@ static void tcp_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int good)
 static void tcp_rearm_rto(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
+	//If we have acked all the data, the retransmit timer should be stopped.
+	// Otherwise we should set the retransmit timer to the current value of RTO
+	//for the next segment to be ACKed 
 
 	//In the case where all the segments are ACKed, we remove retransmit timer .Otherwise we reset timer
 	//This is the only place when we clear retransmit timer since we know that we are not waiting for any more ACKs
@@ -3329,6 +3331,9 @@ static u32 tcp_tso_acked(struct sock *sk, struct sk_buff *skb)
 //  prior_snd_una      snd_una     snd_nxt
 //--------|--------------|----------|-------
 //´¦Àíprior_snd_unaµ½snd_unaÖ®¼ä±»È·ÈÏµÄ±¨ÎÄ¶Î
+//ÎÊÌâ:
+//1.reord
+//2.tcp_update_reordering
 static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_fackets)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -3338,7 +3343,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 	int fully_acked = 1;				//±íÊ¾Êý¾Ý¶ÎÊÇ·ñÍêÈ«±»È·ÈÏ
 	int flag = 0;
 	int prior_packets = tp->packets_out;
-	u32 cnt = 0;
+	u32 cnt = 0;						//	/* ÀÛ¼Ó´ËACK¶ÎÈ·ÈÏµÄÊý¾ÝÁ¿*/ 
 	u32 reord = tp->packets_out;
 	s32 seq_rtt = -1;
 	s32 ca_seq_rtt = -1;
@@ -3385,15 +3390,23 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		if (sacked)
 		{
 			 /* Èç¹û´Ë¶Î±»ÖØ´«¹ý*/  
-			if (sacked & TCPCB_RETRANS)
+			 //We Check if the segemnt was ever retransmitted?
+			if (sacked & TCPCB_RETRANS) 
 			{
-				if (sacked & TCPCB_SACKED_RETRANS)  /* Ö®Ç°ÖØ´«ÁË»¹Ã»ÓÐ»Ö¸´*/
+				//TCPCB_SACKED_RETRANS±êÖ¾Ê²Ã´Ê±ºò»á±»È¥³ýå //???
+				if (sacked & TCPCB_SACKED_RETRANS)  	// Èç¹ûÖ®Ç°ÖØ´«¹ý£¬&& Ö®Ç°»¹Ã»ÊÕµ½»Ø¸´ 
 					tp->retrans_out -= packets_acked;  /* ¸üÐÂÍøÂçÖÐÖØ´«ÇÒÎ´È·ÈÏ¶ÎµÄÊýÁ¿*/  
-				
+
+				//±êÊ¶´ËACK¶ÎÈ·ÈÏÁËÔø¾­±»ÖØ´«¹ýµÄÊý¾Ý
+				//ÎªºÎ×ö´Ë±ê¼Ç(×÷ÓÃ)å???
 				flag |= FLAG_RETRANS_DATA_ACKED;
+
+				//we don't calculate rtt for retransmitted segment
 				ca_seq_rtt = -1;
 				seq_rtt = -1;
-				if ((flag & FLAG_DATA_ACKED) || (packets_acked > 1))
+
+				//ÓÃÓÚF-RTO
+				if ((flag & FLAG_DATA_ACKED) || (packets_acked > 1))  
 					flag |= FLAG_NONHEAD_RETRANS_ACKED;
 			}
 			else  /* Èç¹û´Ë¶ÎÃ»ÓÐ±»ÖØ´«¹ý*/  
@@ -3408,6 +3421,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 				}
 				
 				/* Èç¹ûSACK¿éÖÐÓÐ¿Õ¶´£¬ÄÇÃ´±£´æÆäÖÐÐòºÅ×îÐ¡ºÅµÄ */   
+				//???
 				if (!(sacked & TCPCB_SACKED_ACKED))
 					reord = min(cnt, reord);
 			}
@@ -3420,19 +3434,27 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 			if (sacked & TCPCB_LOST)
 				tp->lost_out -= packets_acked;  /* ¸üÐÂlost_out */ 
 
+			//If this segment is marked to contain an urgent pointer,
+			//we check if the urgent mode is set. If set, we check if the segment
+			//covers the urgent pointer . If both are true, an urgent byte is
+			//ACKed and we unset the urgent mode.
 			if ((sacked & TCPCB_URG) && tp->urg_mode && !before(end_seq, tp->snd_up))
 				tp->urg_mode = 0;
 		} 
-		else
-		{
+		else  
+		{	//neither retransmitted nor SACKed, and neither was marked lost
+		
+			//¼ÆËãRTT
 			ca_seq_rtt = now - scb->when;
 			last_ackt = skb->tstamp;
 			if (seq_rtt < 0)
 			{
 				seq_rtt = ca_seq_rtt;
 			}
+			
 			reord = min(cnt, reord);
 		}
+		
 		tp->packets_out -= packets_acked;  /* ¸üÐÂpackets_out */  
 		cnt += packets_acked;   			/* ÀÛ¼Ó´ËACKÈ·ÈÏµÄÊý¾ÝÁ¿*/  
 
@@ -3471,10 +3493,13 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		const struct tcp_congestion_ops *ca_ops = inet_csk(sk)->icsk_ca_ops;
 
 		/* ¸üÐÂsrtt¡¢RTOµÈRTTÏà¹Ø±äÁ¿*/  
+		//estimate RTO based on either TCP timestamp option or the
+		//new rtt calculated above
 		tcp_ack_update_rtt(sk, flag, seq_rtt);
 		
 		//We need to reset a retransmit timer on each ACK we receive that advances a send window
-		tcp_rearm_rto(sk);  /* ÖØÖÃ³¬Ê±ÖØ´«¶¨Ê±Æ÷*/  
+		/* ÖØÖÃ³¬Ê±ÖØ´«¶¨Ê±Æ÷*/  
+		tcp_rearm_rto(sk);  
 
 		if (tcp_is_reno(tp)) 
 		{
@@ -3521,7 +3546,8 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 	BUG_TRAP((int)tp->sacked_out >= 0);
 	BUG_TRAP((int)tp->lost_out >= 0);
 	BUG_TRAP((int)tp->retrans_out >= 0);
-	if (!tp->packets_out && tcp_is_sack(tp)) {
+	if (!tp->packets_out && tcp_is_sack(tp)) 
+	{
 		icsk = inet_csk(sk);
 		if (tp->lost_out) {
 			printk(KERN_DEBUG "Leak l=%u %d\n",

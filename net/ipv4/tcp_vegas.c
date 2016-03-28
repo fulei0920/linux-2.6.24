@@ -156,14 +156,12 @@ EXPORT_SYMBOL_GPL(tcp_vegas_state);
  */
 void tcp_vegas_cwnd_event(struct sock *sk, enum tcp_ca_event event)
 {
-	if (event == CA_EVENT_CWND_RESTART ||
-	    event == CA_EVENT_TX_START)
+	if (event == CA_EVENT_CWND_RESTART || event == CA_EVENT_TX_START)
 		tcp_vegas_init(sk);
 }
 EXPORT_SYMBOL_GPL(tcp_vegas_cwnd_event);
 
-static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack,
-				 u32 in_flight, int flag)
+static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int flag)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 	struct vegas *vegas = inet_csk_ca(sk);
@@ -193,7 +191,8 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack,
 	 * So we keep track of our cwnd separately, in v_beg_snd_cwnd.
 	 */
 
-	if (after(ack, vegas->beg_snd_nxt)) {
+	if (after(ack, vegas->beg_snd_nxt)) 
+	{
 		/* Do the Vegas once-per-RTT cwnd adjustment. */
 		u32 old_wnd, old_snd_cwnd;
 
@@ -204,8 +203,7 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack,
 		 * with the ACK we just received. Likewise, old_snd_cwnd
 		 * is the cwnd during the previous RTT.
 		 */
-		old_wnd = (vegas->beg_snd_nxt - vegas->beg_snd_una) /
-			tp->mss_cache;
+		old_wnd = (vegas->beg_snd_nxt - vegas->beg_snd_una) / tp->mss_cache;
 		old_snd_cwnd = vegas->beg_snd_cwnd;
 
 		/* Save the extent of the current window so we can use this
@@ -224,12 +222,15 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack,
 		 * If  we have 3 samples, we should be OK.
 		 */
 
-		if (vegas->cntRTT <= 2) {
+		if (vegas->cntRTT <= 2) 
+		{
 			/* We don't have enough RTT samples to do the Vegas
 			 * calculation, so we'll behave like Reno.
 			 */
 			tcp_reno_cong_avoid(sk, ack, in_flight, flag);
-		} else {
+		} 
+		else
+		{
 			u32 rtt, target_cwnd, diff;
 
 			/* We have enough RTT samples, so, using the Vegas
@@ -339,8 +340,10 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack,
 void tcp_vegas_get_info(struct sock *sk, u32 ext, struct sk_buff *skb)
 {
 	const struct vegas *ca = inet_csk_ca(sk);
-	if (ext & (1 << (INET_DIAG_VEGASINFO - 1))) {
-		struct tcpvegas_info info = {
+	if (ext & (1 << (INET_DIAG_VEGASINFO - 1)))
+	{
+		struct tcpvegas_info info = 
+		{
 			.tcpv_enabled = ca->doing_vegas_now,
 			.tcpv_rttcnt = ca->cntRTT,
 			.tcpv_rtt = ca->baseRTT,
@@ -352,7 +355,8 @@ void tcp_vegas_get_info(struct sock *sk, u32 ext, struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(tcp_vegas_get_info);
 
-static struct tcp_congestion_ops tcp_vegas = {
+static struct tcp_congestion_ops tcp_vegas = 
+{
 	.flags		= TCP_CONG_RTT_STAMP,
 	.init		= tcp_vegas_init,
 	.ssthresh	= tcp_reno_ssthresh,

@@ -5,7 +5,8 @@
 #define __TCP_VEGAS_H 1
 
 /* Vegas variables */
-struct vegas {
+struct vegas 
+{
 	u32	beg_snd_nxt;	/* right edge during last RTT */
 	u32	beg_snd_una;	/* left edge  during last RTT */
 	u32	beg_snd_cwnd;	/* saves the size of the cwnd */
