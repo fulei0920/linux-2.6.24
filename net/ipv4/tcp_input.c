@@ -2600,8 +2600,7 @@ static void tcp_undo_cwr(struct sock *sk, const int undo)
 	tcp_moderate_cwnd(tp);
 	tp->snd_cwnd_stamp = tcp_time_stamp;
 
-	/* There is something screwy going on with the retrans hints after
-	   an undo */
+	/* There is something screwy going on with the retrans hints after an undo */
 	tcp_clear_all_retrans_hints(tp);
 }
 
@@ -2668,6 +2667,7 @@ static int tcp_try_undo_recovery(struct sock *sk)
 	//something beyond tp→high_seq to exit the recovery state. This is done in order to
 	//avoid entering a false fast - recovery state in case the retransmissions for segments
 	//below tp→high_seq generate duplicate ACKs.
+	//如果不支持SACK,则需要防止虚假的快速重传， 不能立即撤销到OPEN状态，只对拥塞窗口进行微调
 	//2.2.In the case of SACK/DSACK implementation, DSACKs are generated for each such duplicate ACKs, so we need not
 	//worry and exit the recovery state as soon as tp→high_seq is ACKed. 
 	if (tp->snd_una == tp->high_seq && tcp_is_reno(tp)) 
@@ -2776,6 +2776,7 @@ static int tcp_try_undo_loss(struct sock *sk)
 	{
 		//we undo from loss state. We clear the TCPCB_LOST bit from each segment in the retransmit queue
 		//This means that none of the segment is considered lost, and the loss counter is reset
+		//移除记分牌中所有段的LOSS标记，从而使发送方继续发送新数据而不再重传
 		struct sk_buff *skb;
 		tcp_for_write_queue(skb, sk) 
 		{
@@ -3009,6 +3010,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 	if (icsk->icsk_ca_state == TCP_CA_Open) 
 	{
 		BUG_TRAP(tp->retrans_out == 0);
+		//清除上次重传阶段第一个重传段的发送时间
 		tp->retrans_stamp = 0;
 	} 
 	else if (!before(tp->snd_una, tp->high_seq))

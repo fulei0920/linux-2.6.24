@@ -411,6 +411,8 @@ struct tcp_sock
 	//重传但还没被确认的TCP段数目
 	//takes care of the retransmitted segments marked as lost. 
 	//This will be helpful in detecting partial ACKing in the congestion state. 
+	
+	//keep track of the number of segments retransmitted,
 	u32	retrans_out;	
 /*
  *      Options received (usually on last packet, some only on SYN packets).
@@ -565,6 +567,8 @@ struct tcp_sock
 	//在恢复拥塞控制之前可进行撤销的重传段数。在进入FRTO算法或拥塞控制状态Loss时清零，
 	//在重传时计数，是检测是否可以进行拥塞撤销的条件之一。
 	//helps in detecting false retransmits in recovery/loss state
+	
+	//catch the number of D - SACKs which is required to check unnecessary retransmissions.
 	int	undo_retrans;	/* number of undoable retransmissions. */
 	u32	urg_seq;	/* Seq of received urgent pointer */
 	u16	urg_data;	/* Saved octet of OOB data and control flags */
