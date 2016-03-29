@@ -1834,17 +1834,19 @@ void tcp_simple_retransmit(struct sock *sk)
 	unsigned int mss = tcp_current_mss(sk, 0);
 	int lost = 0;
 
-	tcp_for_write_queue(skb, sk) {
+	tcp_for_write_queue(skb, sk) 
+	{
 		if (skb == tcp_send_head(sk))
 			break;
-		if (skb->len > mss &&
-		    !(TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_ACKED)) {
+		if (skb->len > mss && !(TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_ACKED))
+		{
 			if (TCP_SKB_CB(skb)->sacked&TCPCB_SACKED_RETRANS) 
 			{
 				TCP_SKB_CB(skb)->sacked &= ~TCPCB_SACKED_RETRANS;
 				tp->retrans_out -= tcp_skb_pcount(skb);
 			}
-			if (!(TCP_SKB_CB(skb)->sacked&TCPCB_LOST)) {
+			if (!(TCP_SKB_CB(skb)->sacked&TCPCB_LOST))
+			{
 				TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
 				tp->lost_out += tcp_skb_pcount(skb);
 				lost = 1;

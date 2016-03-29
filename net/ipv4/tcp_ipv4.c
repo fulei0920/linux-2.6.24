@@ -292,6 +292,14 @@ failure:
 /*
  * This routine does path mtu discovery as defined in RFC1191.
  */
+//PMTU has changed and needs to do a path MTU discovery and needs to
+//retransmit everything that is not marked SACK/lost by calling tcp_simple_
+//retransmit() from do_pmtu_discovery(). In this case we enter into a loss state
+//but without reducing the congestion window to 1 but reduce the slow - start
+//threshold to half of the congestion window, which means doing congestion
+//avoidance. We don ¡¯ t want to undo from the loss state here until we get ACK
+//for tp¡úhigh_seq because the idea here is to just reduce the rate at which the
+//congestion window should be increased on arrival of ACK.
 static void do_pmtu_discovery(struct sock *sk, struct iphdr *iph, u32 mtu)
 {
 	struct dst_entry *dst;

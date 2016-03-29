@@ -191,6 +191,7 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 	 * So we keep track of our cwnd separately, in v_beg_snd_cwnd.
 	 */
 
+	//判断ack,也就是上次采样标记之后的数据全部ack之后，才会进入vegas算法
 	if (after(ack, vegas->beg_snd_nxt)) 
 	{
 		/* Do the Vegas once-per-RTT cwnd adjustment. */
@@ -254,6 +255,7 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 			 * We keep it as a fixed point number with
 			 * V_PARAM_SHIFT bits to the right of the binary point.
 			 */
+		//计算下次应该的窗口
 			target_cwnd = ((old_wnd * vegas->baseRTT)
 				       << V_PARAM_SHIFT) / rtt;
 
@@ -265,8 +267,10 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 			 * V_PARAM_SHIFT bits to the right of the binary
 			 * point.
 			 */
+		//计算窗口的变化差
 			diff = (old_wnd << V_PARAM_SHIFT) - target_cwnd;
-
+			
+		//如果变化太大(适用于slow start)，则减小窗口
 			if (diff > gamma && tp->snd_ssthresh > 2 ) {
 				/* Going too fast. Time to slow down
 				 * and switch to congestion avoidance.
@@ -315,8 +319,10 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 				 * desired value.
 				 */
 				if (next_snd_cwnd > tp->snd_cwnd)
+					//网络中包太少，因此加速
 					tp->snd_cwnd++;
 				else if (next_snd_cwnd < tp->snd_cwnd)
+					//发送太快，因此减速
 					tp->snd_cwnd--;
 			}
 
@@ -327,6 +333,7 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 		}
 
 		/* Wipe the slate clean for the next RTT. */
+		//重置cntRTT和minRTT
 		vegas->cntRTT = 0;
 		vegas->minRTT = 0x7fffffff;
 	}

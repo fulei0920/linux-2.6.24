@@ -2661,15 +2661,39 @@ static int tcp_try_undo_recovery(struct sock *sk)
 		
 		tp->undo_marker = 0;
 	}
+
+	//Whether we can
+	//leave the congestion state will depend on the TCP implementation and sequence
+	//number ACKed. With Reno implementation, we don ’ t want to leave the loss state
+	//until something above tp→high_seq is ACKed to avoid false fastretransmissions
+	//This is very well documented in RFC 2582. The idea is that we may have retransmitted 
+	//three segments after entering the loss state. When those segments reach the
+	//receiver, it will generate a duplicate ACK when those segments are already there
+	//in the out - of - order queue. In the case of Reno implementation, we have no idea of
+	//SACK/DSACK, so these duplicate ACKs should not be confused with the fast -
+	//recovery state we wait for until something above the high sequence is ACKed. New
+	//data (above tp→high_seq) are transmitted only after we have retransmitted all the
+	//lost segments and the congestion window allows us to do so. So, new data ACKed
+	//means that we have already ACKed new data that are beyond the window that
+	//moved us into the congestion state. In this case, we just moderate the congestion
+	//window and continue to send out new segments in the loss state until something
+	//beyond tp→high_seq is ACKed. The reason that we are doing this in the loss state
+	//is that there may be reordering taking place in the loss state also that may lead to
+	//retransmission of segments causing false fast recovery when the retransmitted segments cause duplicate ACKs when tp→high_seq is ACKed.
+	//In the case of SACK implementation, we exit the congestion state (loss) as soon
+	//as we ACK tp→high_seq because the duplicate ACK for the above - explained case
+	//will carry DSACK and will differentiate these duplicate ACKs from fast recovery.
+	//In the case where we are not able to exit the loss state, we return with TCP_CA_Loss
+	//state; otherwise we need to process the open state further.
 	
-	//2.try to exit the recovery state.
+	//2.try to exit the congestion state.
 
 	//2.1.In the case of Reno implementation, we should ACK
-	//something beyond tp→high_seq to exit the recovery state. This is done in order to
+	//something beyond tp->high_seq to exit the recovery state. This is done in order to
 	//avoid entering a false fast - recovery state in case the retransmissions for segments
-	//below tp→high_seq generate duplicate ACKs.
+	//below tp->high_seq generate duplicate ACKs.
 	//2.2.In the case of SACK/DSACK implementation, DSACKs are generated for each such duplicate ACKs, so we need not
-	//worry and exit the recovery state as soon as tp→high_seq is ACKed. 
+	//worry and exit the recovery state as soon as tp->high_seq is ACKed. 
 	if (tp->snd_una == tp->high_seq && tcp_is_reno(tp)) 
 	{
 		/* Hold old state until something *above* high_seq
@@ -2687,10 +2711,7 @@ static int tcp_try_undo_recovery(struct sock *sk)
 }
 
 /* Try to undo cwnd reduction, because D-SACKs acked all retransmitted data */
-//check if the DSACK is received that may open the TCP
-//state. If so, we are able to undo from the congestion state prior to entering the
-//recovery state. On reception of each DSACK within the window, tp→undo_retrans
-//is decremented by 1 (see tcp_sacktag_write_queue())
+//check if we received DSACK that clears off tp->undo_retrans field
 static void tcp_try_undo_dsack(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2709,7 +2730,7 @@ static void tcp_try_undo_dsack(struct sock *sk)
 	{
 		DBGUNDO(sk, "D-SACK");
 		//We call tcp_undo_cwr() to get us back to the congestion state prior to entering
-		//congestion by adjusting tp→snd_ssthresh and tp→snd_cwnd. This is to increment
+		//congestion by adjusting tp->snd_ssthresh and tp->snd_cwnd. This is to increment
 		//the rate of data transmission. 
 		tcp_undo_cwr(sk, 1);
 		//We reset tp->undo_marker, which is a clear indication
@@ -2873,6 +2894,7 @@ static void tcp_try_to_open(struct sock *sk, int flag)
 		//able to undo from the congestion states, tp->undo_retrans and tp->undo_marker will still be 
 		//set to the congestion state value.
 		//In both of the above cases, we just set the TCP state to disorder 
+		
 		//2.In the case where we are already in the disorder state and received an ACK, we just call 
 		//tcp_moderate_window() to bring down the transmission rate and do nothing.
 		if (tcp_left_out(tp) || tp->retrans_out || tp->undo_marker)
@@ -2884,7 +2906,8 @@ static void tcp_try_to_open(struct sock *sk, int flag)
 			tcp_set_ca_state(sk, state);
 			tp->high_seq = tp->snd_nxt;
 		}
-		//slow down the rate of transmission.
+		//slow down the rate of data transmission to send a maximum of three new segments
+		
 		//we actually restrict ourselves to sending out a maximum of three new segments from here. 
 		//This way we enter into the disorder state
 		tcp_moderate_cwnd(tp);
@@ -3037,14 +3060,18 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 
 		case TCP_CA_Disorder:
 			tcp_try_undo_dsack(sk);
-			//If we have entered the disorder state from the open state without tp?undo_marker
+			//If we have entered the disorder state from the open state without tp->undo_marker
 			//set (reception of the first duplicate ACK) or call to tcp_try_undo_dsack() might
-			//have cleared tp?undo_marker. In the case where tp?undo_marker is set, we can
+			//have cleared tp->undo_marker. In the case where tp->undo_marker is set, we can
 			//still enter the open state in case this is Reno implementation because we have
 			//nothing like DSACK to catch. Still we can undo from the disorder state in the case
-			//where SACK is implemented and we have ACKed something above tp?high_seq
+			//where SACK is implemented and we have ACKed something above tp->high_seq
 			//because this makes sure that all the data from the window at the time of entering
 			//the congestion state have reached the receiver properly. 
+
+			//1. Is tp→undo_marker reset?
+			//2. Is it Reno implementation (SACK is disabled)?
+			//3. If condition 2 is false, have we received ACK for data above tp→high_seq.
 			if (!tp->undo_marker ||
 			    /* For SACK case do not Open to allow to undo
 			     * catching for all duplicate ACKs. */
@@ -3125,17 +3152,23 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 				tcp_reset_reno_sack(tp);
 			//In case we have received a duplicate ACK, we need to update the Reno SACK 
 			//Since Reno implementation has no idea which segment has reached the receiver out-of-order, it just 
-			//increments the SACK counter on reception of every consecutive duplicate ACK 
+			//increments the SACK counter on reception of every consecutive duplicate ACK. Similarly, it resets 
+			//the SACK counter when new data are ACKed by calling tcp_reset_reno_sack().This way Linux TCP 
+			//implementation simulates SACK for SACKless Reno implementation
 			if (is_dupack)
 				tcp_add_reno_sack(sk);
 		}
 
-		//check if we can undo from disorder state (TCP_CA_Disorder), which means that we have just sensed 
-		//reordering but have not entered the recovery state.
+		//This routine check if the DSACK is received that may open the TCP
+		//state. If so, we are able to undo from the congestion state prior to entering the
+		//recovery state. On reception of each DSACK within the window, tp->undo_retrans
+		//is decremented by 1 (see tcp_sacktag_write_queue())
 		if (icsk->icsk_ca_state == TCP_CA_Disorder)
 			tcp_try_undo_dsack(sk);
 
 		//Check if we need to enter the fast-retransmission fast-recovery state (TCP_CA_Recovery). 
+		//We are here only if we have entered tcp_fastretrans_alert() in any of the four states:
+		//1. TCP_CA_Open 2. TCP_CA_Disorder 3. TCP_CA_CWR  (4.TCP_CA_Loss)
 		if (!tcp_time_to_recover(sk)) 
 		{
 			//we can't enter into the recovery state. So, we check the possibility of entering the 
@@ -3147,8 +3180,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		//we are entering into a fast-retransmit fast-recovery state (TCP_CA_Recovery). 
 
 		/* MTU probe failure: don't reduce cwnd */
-		if (icsk->icsk_ca_state < TCP_CA_CWR &&
-		    icsk->icsk_mtup.probe_size &&
+		if (icsk->icsk_ca_state < TCP_CA_CWR && icsk->icsk_mtup.probe_size &&
 		    tp->snd_una == tp->mtu_probe.probe_seq_start)
 		{
 			tcp_mtup_probe_failed(sk);
@@ -3531,8 +3563,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 			if (!(flag & FLAG_RETRANS_DATA_ACKED)) 
 			{
 				/* High resolution needed and available? */
-				if (ca_ops->flags & TCP_CONG_RTT_STAMP &&
-				    !ktime_equal(last_ackt, net_invalid_timestamp()))
+				if (ca_ops->flags & TCP_CONG_RTT_STAMP && !ktime_equal(last_ackt, net_invalid_timestamp()))
 					rtt_us = ktime_us_delta(ktime_get_real(), last_ackt);  //高精确度的RTT测量，可以精确到微秒！ 
 				else if (ca_seq_rtt > 0)   /* 普通测量，精确到毫秒，再转为微秒*/ 
 					rtt_us = jiffies_to_usecs(ca_seq_rtt);
