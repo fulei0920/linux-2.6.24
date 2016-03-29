@@ -414,6 +414,9 @@ static void tcp_retransmit_timer(struct sock *sk)
 	if (tcp_retransmit_skb(sk, tcp_write_queue_head(sk)) > 0) 
 	{
 		/* Retransmission failed because of local congestion,  do not backoff.*/
+		//Since we need to probe availability of local resources more frequently
+		//than RTO, that is why we want the tcp retransmit timer to expire fast so that we
+		//can retransmit the lost segment.
 		if (!icsk->icsk_retransmits)
 			icsk->icsk_retransmits = 1;
 		inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, min(icsk->icsk_rto, TCP_RESOURCE_PROBE_INTERVAL), TCP_RTO_MAX);
@@ -442,7 +445,12 @@ static void tcp_retransmit_timer(struct sock *sk)
 out_reset_timer:
 	//要注意，重传的时候为了防止确认二义性，使用karn算法，也就是定时器退避策略
 	icsk->icsk_rto = min(icsk->icsk_rto << 1, TCP_RTO_MAX);
+	//we reset the retransmit timer to expire at the backoffed value of RTO, tp?rto
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, icsk->icsk_rto, TCP_RTO_MAX);
+	//check if the maximum number of retries has exceeded the limit to
+	//reset route. If so, we reset the route for the connection so that on next
+	//retransmit we are able to find a new route for the connection because the current
+	//route may be causing a problem.
 	if (icsk->icsk_retransmits > sysctl_tcp_retries1) 
 		__sk_dst_reset(sk);
 
