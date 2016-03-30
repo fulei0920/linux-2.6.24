@@ -2814,7 +2814,7 @@ static int tcp_try_undo_loss(struct sock *sk)
 		inet_csk(sk)->icsk_retransmits = 0;
 		tp->undo_marker = 0;
 		//in case of SACK implementation we enter into the open state, which may finally fall 
-		//into the recovery phase. because SACK implementations have good control over the 
+		//into the recovery phase. Because SACK implementations have good control over the 
 		//congestion state. We may enter the recovery state depending on the number of segments 
 		//SACKed out immediately.
 		//With Reno implementation, we continue with the loss state 
@@ -3133,7 +3133,7 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 		}
 		//If we are able to undo, we return only if TCP state has not opened.
 		//If the TCP state has opened, because of partial ACK. We may look for 
-		//the possibility of entering into the recovery state andwe proceed with 
+		//the possibility of entering into the recovery state and we proceed with 
 		//default processing of the TCP state
 		if (icsk->icsk_ca_state != TCP_CA_Open)
 			return;

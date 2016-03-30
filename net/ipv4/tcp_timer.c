@@ -352,11 +352,10 @@ static void tcp_retransmit_timer(struct sock *sk)
 			tcp_write_err(sk);
 			goto out;
 		}
-		//the socket is not timed out, we enter the loss state
+		//In case the socket is not timed out, we enter the loss state by entering slow - start (call tcp_enter_loss())
 		tcp_enter_loss(sk, 0);
-		///现在开始重传skb。
+		//retransmit the head of the retransmit queue
 		tcp_retransmit_skb(sk, tcp_write_queue_head(sk));
-		//invalidate the destination
 		//then invalidate the destination by calling __sk_dst_reset(). 
 		//The reason for finding an alternate route
 		//for the connection may be that we are not able to communicate with the peer
@@ -407,13 +406,18 @@ static void tcp_retransmit_timer(struct sock *sk)
 	} 
 	else
 	{
+		//we have not exhausted our retries. We need to
+		//call tcp_enter_loss() to enter into the slow - start phase
 		tcp_enter_loss(sk, 0);
 	}
 
-	/// 再次尝试重传队列的第一个段
+	//we try to retransmit the first segment from the retransmit queue
 	if (tcp_retransmit_skb(sk, tcp_write_queue_head(sk)) > 0) 
 	{
 		/* Retransmission failed because of local congestion,  do not backoff.*/
+		//we fail to retransmit here, the reason for failure is local congestion.
+		//In this case, we don't back off the retransmit timeout value. We reset the retransmit
+		//timer with a minimum timeout value of icsk->icsk_rto and TCP_RESOURCE_PROBE_INTERVAL. 
 		//Since we need to probe availability of local resources more frequently
 		//than RTO, that is why we want the tcp retransmit timer to expire fast so that we
 		//can retransmit the lost segment.
@@ -439,13 +443,18 @@ static void tcp_retransmit_timer(struct sock *sk)
 	 * the 120 second clamps though!
 	 */
 	///icsk->icsk_backoff主要用在零窗口定时器
+	//We increment tp?back_off by one
+	// Even though we are not using the value of tp?back_off here, it is
+	//required by the zero - window probe timer.
 	icsk->icsk_backoff++;
 	icsk->icsk_retransmits++;
 
 out_reset_timer:
 	//要注意，重传的时候为了防止确认二义性，使用karn算法，也就是定时器退避策略
+
+	 //(RTO can 't exceed beyond TCP_RTO_MAX). get the min of backoffed value of RTO and  TCP_RTO_MAX
 	icsk->icsk_rto = min(icsk->icsk_rto << 1, TCP_RTO_MAX);
-	//we reset the retransmit timer to expire at the backoffed value of RTO, tp?rto
+	//we reset the retransmit timer to expire at the backoffed value of RTO, tp->rto
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS, icsk->icsk_rto, TCP_RTO_MAX);
 	//check if the maximum number of retries has exceeded the limit to
 	//reset route. If so, we reset the route for the connection so that on next
