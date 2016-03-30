@@ -266,7 +266,8 @@ int tcp_set_congestion_control(struct sock *sk, const char *name)
 	else if (!try_module_get(ca->owner))
 		err = -EBUSY;
 
-	else {
+	else 
+	{
 		tcp_cleanup_congestion_control(sk);
 		icsk->icsk_ca_ops = ca;
 

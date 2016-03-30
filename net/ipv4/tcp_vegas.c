@@ -256,8 +256,7 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 			 * V_PARAM_SHIFT bits to the right of the binary point.
 			 */
 		//计算下次应该的窗口
-			target_cwnd = ((old_wnd * vegas->baseRTT)
-				       << V_PARAM_SHIFT) / rtt;
+			target_cwnd = ((old_wnd * vegas->baseRTT) << V_PARAM_SHIFT) / rtt;
 
 			/* Calculate the difference between the window we had,
 			 * and the window we would like to have. This quantity
@@ -271,7 +270,8 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 			diff = (old_wnd << V_PARAM_SHIFT) - target_cwnd;
 			
 		//如果变化太大(适用于slow start)，则减小窗口
-			if (diff > gamma && tp->snd_ssthresh > 2 ) {
+			if (diff > gamma && tp->snd_ssthresh > 2 ) 
+			{
 				/* Going too fast. Time to slow down
 				 * and switch to congestion avoidance.
 				 */
@@ -288,22 +288,29 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 						   (target_cwnd >>
 						    V_PARAM_SHIFT)+1);
 
-			} else if (tp->snd_cwnd <= tp->snd_ssthresh) {
+			}
+			else if (tp->snd_cwnd <= tp->snd_ssthresh) 
+			{
 				/* Slow start.  */
 				tcp_slow_start(tp);
-			} else {
+			} 
+			else
+			{
 				/* Congestion avoidance. */
 				u32 next_snd_cwnd;
 
 				/* Figure out where we would like cwnd
 				 * to be.
 				 */
-				if (diff > beta) {
+				if (diff > beta) 
+				{
 					/* The old window was too fast, so
 					 * we slow down.
 					 */
 					next_snd_cwnd = old_snd_cwnd - 1;
-				} else if (diff < alpha) {
+				} 
+				else if (diff < alpha)
+				{
 					/* We don't have enough extra packets
 					 * in the network, so speed up.
 					 */

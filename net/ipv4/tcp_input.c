@@ -1207,7 +1207,8 @@ static int tcp_mark_lost_retrans(struct sock *sk, u32 received_upto)
 			/* clear lost hint */
 			tp->retransmit_skb_hint = NULL;
 
-			if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_LOST|TCPCB_SACKED_ACKED))) {
+			if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_LOST|TCPCB_SACKED_ACKED))) 
+			{
 				tp->lost_out += tcp_skb_pcount(skb);
 				TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
 				flag |= FLAG_DATA_SACKED;
@@ -3946,6 +3947,7 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 	//根据ACK的明确与否，更新拥塞窗口，进行拥塞控制
 
 	//根据ACK段判断我们是否进入拥塞状态(收到拥塞信号，察觉到拥塞)，或者已经处于拥塞状态。
+
 	if (tcp_ack_is_dubious(sk, flag)) 
 	{
 
@@ -3957,7 +3959,12 @@ static int tcp_ack(struct sock *sk, struct sk_buff *skb, int flag)
 		/* Advance CWND, if state allows this. */
 		if ((flag & FLAG_DATA_ACKED) && !frto_cwnd && tcp_may_raise_cwnd(sk, flag))
 			tcp_cong_avoid(sk, ack, prior_in_flight, 0);  /* 拥塞窗口的调节*/ 
-		 /* 这里进入TCP的拥塞状态机，处理相关拥塞状态*/  
+		//	tcp_fastretrans_alert() is entered：
+		//（1）each incoming ACK, if state is not Open
+		//（2）when arrived ACK is unusual, namely:
+		//          SACK
+		//          Duplicate ACK
+		//          ECN ECE  
 		tcp_fastretrans_alert(sk, prior_packets - tp->packets_out, flag);
 	}
 	else 

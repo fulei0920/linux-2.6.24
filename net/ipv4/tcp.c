@@ -1894,7 +1894,8 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 	int err = 0;
 
 	/* This is a string value all the others are int's */
-	if (optname == TCP_CONGESTION) {
+	if (optname == TCP_CONGESTION) 
+	{
 		char name[TCP_CA_NAME_MAX];
 
 		if (optlen < 1)
@@ -1920,7 +1921,8 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 
 	lock_sock(sk);
 
-	switch (optname) {
+	switch (optname) 
+	{
 	case TCP_MAXSEG:
 		/* Values greater than interface MTU won't take effect. However
 		 * at the point when this call is done we typically don't yet
