@@ -2301,14 +2301,24 @@ static int tcp_time_to_recover(struct sock *sk)
 		return 0;
 
 	/* Trick#1: The loss is proven. */
+	//tp->lost_out is incremented
+	//in tcp_mark_head_lost() even if we are in a disorder state or an open state. This
+	//happens in tcp_fastretrans_alert() when a FLAG_DATA_LOST flag is set. Otherwise there is no other way we call 
+	//tcp_time_to_recover() with tp?lost_out more than zero.
+	//We might have entered tcp_fastretrans_alert() in any of the congestion states , but we may leave 
+	//the congestion state and enter the open state (because of tp?high_seq being ACKed).
 	if (tp->lost_out)
 		return 1;
 
 	/* Not-A-Trick#2 : Classic rule... */
-	//Check here is the number of Facked-out segments that have exceeded reordering length
+	//We check here if the number of Facked-out segments that have exceeded reordering length
 	//If the condition is true, it means that some of the segments at the beginning of the 
 	//retransmit queue are considered lost because the rest of them covered by reorder length 
 	//are considered as being reordered in the network and will appear sooner or later. 
+	//This a classic rule to enter into the fast -
+	//retransmit fast - recovery state where if we get three duplicate ACKs, we consider
+	//the head of the list as lost and retransmit the head of the list. With FACK/SACK,
+	//we know exactly what is lost and how much to transmit that we see later.
 	if (tcp_fackets_out(tp) > tp->reordering)
 		return 1;
 
@@ -2321,6 +2331,12 @@ static int tcp_time_to_recover(struct sock *sk)
 	//signal early retransmission.
 	if (tcp_head_timedout(sk))
 		return 1;
+
+	//we have not entered fast - recovery state because of the following:
+	//1. No packet is lost.
+	//2. Facked segments has not exceeded reordering length.
+	//3. Head if the transmit queue has not timed out.
+
 
 	/* Trick#4: It is still not OK... But will it be useful to delay
 	 * recovery more?
