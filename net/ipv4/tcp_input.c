@@ -1746,6 +1746,7 @@ static void tcp_check_reno_reordering(struct sock *sk, const int addend)
 
 	if ((tp->sacked_out + holes) > tp->packets_out)
 	{
+		// sacked - out segments have exceeded our expectations
 		//we adjust the sacked - out segments as the difference between packets transmitted 
 		//and lost segments
 		tp->sacked_out = tp->packets_out - holes;
@@ -1757,7 +1758,7 @@ static void tcp_check_reno_reordering(struct sock *sk, const int addend)
 	}
 }
 
-/* Emulate SACKs for SACKless connection: account for a new dupack. */
+/*Emulate SACKs for SACKless connection: account for a new dupack. */
 //Reno implementation does not have any idea of any out - of - order segments that are
 //received by the peer. We try to simulate SACK - out segments from the duplicate
 //acknowledgments we receive. This makes our work simpler by having a common
@@ -2335,12 +2336,18 @@ static int tcp_time_to_recover(struct sock *sk)
 	//we have not entered fast - recovery state because of the following:
 	//1. No packet is lost.
 	//2. Facked segments has not exceeded reordering length.
-	//3. Head if the transmit queue has not timed out.
+	//3. Head of the transmit queue has not timed out.
 
 
-	/* Trick#4: It is still not OK... But will it be useful to delay
-	 * recovery more?
-	 */
+	/* Trick#4: It is still not OK... But will it be useful to delay recovery more? */
+	//We still can enter into the fast - recovery state. We have reordering length 
+	//calculated from the SACK information calculated from the last window. In the current
+	//window, in this case, we may be misled and can detect congestion here. In the case
+	//where the number of packets sent out (tp¡úpackets_out) is less than the reordering
+	//length and the SACKed out segments are more than the maximum of half the
+	//number of the packets transmitted so far and sysctl_tcp_reordering, we
+	//can enter into the recovery state if there is nothing to be sent out (tcp_may_send_
+	//now() returns FALSE)
 	packets_out = tp->packets_out;
 	if (packets_out <= tp->reordering &&
 	    tp->sacked_out >= max_t(__u32, packets_out/2, sysctl_tcp_reordering) &&
@@ -2401,7 +2408,7 @@ static void tcp_mark_head_lost(struct sock *sk, int packets)
 			break;
 
 		//The segments are marked lost only if they are neither
-		//SACKed/retransmitted or not already marked lost
+		//SACKed or not already marked lost
 		if (!(TCP_SKB_CB(skb)->sacked & (TCPCB_SACKED_ACKED|TCPCB_LOST))) 
 		{
 			TCP_SKB_CB(skb)->sacked |= TCPCB_LOST;
@@ -2774,6 +2781,11 @@ static int tcp_try_undo_partial(struct sock *sk, int acked)
 	//estimate of re - ordering.
 	int failed = tcp_is_reno(tp) || tp->fackets_out > tp->reordering;
 
+
+	//We check if the partially ACKed data exist because
+	//of original transmission and not retransmission. We don ¡¯ t switch to an open state
+	//here but only revert to a congestion state prior to entering congestion in case we
+	//received ACK for original transmissions.
 	if (tcp_may_undo(tp)) 
 	{
 		/* Plain luck! Hole if filled with delayed
@@ -3134,6 +3146,8 @@ tcp_fastretrans_alert(struct sock *sk, int pkts_acked, int flag)
 			//We check if we can undo from received partial ACK
 			//The return value will decide if we want to mark more 
 			//segments as lost and carry on with retransmits later 
+			//TRUE return value is considered similar to duplicate
+			//ACK because duplicate ACK will force tcp_update_scoreboard() to be called later
 			do_lost = tcp_try_undo_partial(sk, pkts_acked);
 		}
 			

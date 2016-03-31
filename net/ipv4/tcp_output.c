@@ -1603,7 +1603,8 @@ void tcp_push_one(struct sock *sk, unsigned int mss_now)
 		/* Send it out now. */
 		TCP_SKB_CB(skb)->when = tcp_time_stamp;
 
-		if (likely(!tcp_transmit_skb(sk, skb, 1, sk->sk_allocation))) {
+		if (likely(!tcp_transmit_skb(sk, skb, 1, sk->sk_allocation)))
+		{
 			update_send_head(sk, skb);
 			tcp_cwnd_validate(sk);
 			return;
