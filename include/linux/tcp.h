@@ -547,6 +547,7 @@ struct tcp_sock
 	//记录发生拥塞时的最大的发送序号(snd_nxt)， 标识重传队列的尾部
 	//tp->high_seq is set to the highest sequence number that has been
 	//transmitted at that point of time when we enter loss or recovery, disorder (cwr) state.
+	//so that once this sequence is acknowledged, we can try to leave(undo) from the congestion state.
 	u32	high_seq;	
 
 	//在主动连接时，记录第一个SYN段的发送时间，用来检测ACK序号是否回绕
@@ -559,11 +560,11 @@ struct tcp_sock
 	//一般在完成拥塞撤销操作或进入拥塞控制Loss状态状态后清零。
 	///表示发生重传时的snd_una
 	///超时重传或FRTO时记录的snd_una
-	//set to tp->snd_una when we enter the recovery phase and retransmit data,
+
 	//this is set to unACKed sequence number (tp->snd_una) when we enter the congestion state. 
-	//如果为0，表示。。。
+	//If this field is set, we know that we are eligible for undoing from the congestion state
 	//0 means that we don't want to undo from the congestion state (tcp_may_undo())
-	u32	undo_marker;	/* tracking retrans started here. */
+	u32	undo_marker;	
 	///记录重传数据包的个数，如果undo_retrans降到0，
     ///就说明之前的重传都是不必要的，进行拥塞调整撤销。
 

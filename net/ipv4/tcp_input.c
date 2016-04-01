@@ -901,6 +901,7 @@ void tcp_enter_cwr(struct sock *sk, const int set_ssthresh)
 	{
 		//tp->undo_marker is not set because we are sure that we are not retransmitting anything in this state
 		//(tp->undo_marker should be set to undo from the congestion state; refer to tcp_may_undo()).
+		// If we are not retransmitting anything, we should not expect any test for false retransmissions and delayed packets
 		tp->undo_marker = 0;
 		if (set_ssthresh)
 			tp->snd_ssthresh = icsk->icsk_ca_ops->ssthresh(sk);
@@ -2503,6 +2504,10 @@ static inline u32 tcp_cwnd_min(const struct sock *sk)
 
 /* Decrease cwnd each second ack. */
 //try to reduce the congestion window on the reception of every second ACK
+//we also try to keep the congestion window such that at the most one new segment
+//can be transmitted which is calculated as packets_in_flight() + 1. Otherwise if the
+//congestion window is less than the number of packets in flight + 1, we wait for more
+//segments to be ACKed before we can transmit any new segment.
 static void tcp_cwnd_down(struct sock *sk, int flag)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2515,11 +2520,7 @@ static void tcp_cwnd_down(struct sock *sk, int flag)
 
 		if (decr && tp->snd_cwnd > tcp_cwnd_min(sk))
 			tp->snd_cwnd -= decr;
-		//try to keep the congestion window such that at the most one new segment
-		//can be transmitted which is calculated as packets_in_flight() + 1. 
-		//Otherwise if the congestion window is less than the number of packets in 
-		//flight + 1, we wait for more segments to be ACKed before we can transmit 
-		//any new segment.
+
 		tp->snd_cwnd = min(tp->snd_cwnd, tcp_packets_in_flight(tp)+1);
 		tp->snd_cwnd_stamp = tcp_time_stamp;
 	}
@@ -2627,15 +2628,15 @@ static void tcp_undo_cwr(struct sock *sk, const int undo)
 	tcp_clear_all_retrans_hints(tp);
 }
 
+
+//check if we did false retransmission because of underestimated RTO or packets getting late in the flight 
+
 //Undoing from state means that if we were misled into the congestion state
 //because of a packet delayed in the network, reordering of segments, and underestimated RTOs, 
 //we can resume the same state as it was before. After entering into
 //congestion state, we may retransmit segments marked lost. We can sense undoing
 //from the state in case we find that the original transmissions are succeeding. We do
 //this by calling tcp_may_undo().
-
-
-//check if we did false retransmission because of underestimated RTO or packets getting late in the flight 
 static inline int tcp_may_undo(struct tcp_sock *tp)
 {
 	//1. the packet got delayed and reached the receiver before the 
@@ -2654,8 +2655,13 @@ static inline int tcp_may_undo(struct tcp_sock *tp)
 	//with the retransmitted segments. It may also happen that the ACKs to the segment
 	//transmitted earlier were lost and when we retransmitted them, we got DSACKs for
 	//those retransmitted segments. If tp¡úundo_retrans is nonzero, it means that we have
-	//retransmitted something. 
-	//We check if packets got delayed in the network but reached the destination by calling tcp_packet_delayed().
+	//retransmitted something. We check if packets got delayed in the network but reached 
+	//the destination by calling tcp_packet_delayed(). 
+
+	//We undo from the congestion state only if we got DSACKs for all retransmitted
+	//segments (tp¡úundo_retrans equal to 0) or our original transmissions successfully
+	//reached the receiver (tcp_packet_delayed() returned TRUE because tp¡úrcv_tsecr
+	//< tp¡úretrans_stamp).
 	return tp->undo_marker && (!tp->undo_retrans || tcp_packet_delayed(tp));
 }
 
@@ -2783,7 +2789,7 @@ static int tcp_try_undo_partial(struct sock *sk, int acked)
 
 
 	//We check if the partially ACKed data exist because
-	//of original transmission and not retransmission. We don ¡¯ t switch to an open state
+	//of original transmission and not retransmission. We don't switch to an open state
 	//here but only revert to a congestion state prior to entering congestion in case we
 	//received ACK for original transmissions.
 	if (tcp_may_undo(tp)) 
@@ -2864,6 +2870,9 @@ static inline void tcp_complete_cwr(struct sock *sk)
 }
 
 //This routine checks if we need to enter into the CWR state or the disorder state.
+//We adjust the congestion window for these states by trying to bring it down as we
+//need to keep congestion under control to avoid serious loss. nothing is marked lost in these
+//states. 
 //We are called only in open, C(ongestion)W(indow)R(eduction), and disorder TCP states.
 static void tcp_try_to_open(struct sock *sk, int flag)
 {
@@ -2894,6 +2903,8 @@ static void tcp_try_to_open(struct sock *sk, int flag)
 
 	//we are here only in three TCP states: TCP_CA_Open, TCP_CA_CWR, and TCP_CA_Disorder.
 	//We may have entered the CWR state in this routine itself because of the ECE flag set.
+	//If the CWR state is set, we just call tcp_cwnd_down() to simply try to reduce
+	//the congestion window on the reception of every second ACK.
 	if (inet_csk(sk)->icsk_ca_state != TCP_CA_CWR)
 	{
 		//we are processing either the TCP_CA_Open state or the TCP_CA_Disorder state here.
