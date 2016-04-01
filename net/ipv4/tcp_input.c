@@ -1775,6 +1775,8 @@ static void tcp_add_reno_sack(struct sock *sk)
 	//retransmitted were actually not lost but instead reached late. This happened because of 
 	//reordering of segments. In this case the original transmissions and the retransmissions both 
 	//got received, and duplicate ACK was generated for both.
+
+	//Check if we need to update the Reno reordering length.
 	tcp_check_reno_reordering(sk, 0);
 	tcp_verify_left_out(tp);
 }
@@ -2179,16 +2181,20 @@ static inline int tcp_skb_timedout(struct sock *sk, struct sk_buff *skb)
 
 //We try to find out if the head of the retransmit queue is not ACKed even after it
 //has elapsed more than RTO since it was transmitted. Timestamp is stored in each
-//segment (skb->when) when it is transmitted in tcp_transmit_skb().The retransmit 
+//segment (skb->when) when it is transmitted in tcp_transmit_skb(). When we receive
+//ACK for a segment, we set a retransmission timeout timer for the next segment in
+//tcp_ack()->tcp_clean_rtx_queue()->tcp_rearm_rto().   The timeout value for the retransmission timer
+//is set to tp?rto, even though the next segment was transmitted much earlier. So,
+//timeout for the next segment is slightly overestimated by time lapsed since it was
+//transmitted and the ACK for the previous segment arrived. We can detect early
+//timeout for the retransmit queue head by calling tcp_head_timedout(). The routine
+//checks if the time lapsed since the head of the retransmit queue was transmitted
+//has exceeded the RTO.  The retransmit 
 //timer won't fire for the next segment (head of the retransmit queue) even if the 
 //segment has elapsed more than RTO (tp->rto) because the retransmit timer is 
-//started only after the ACK for the previous segment was received. When we receive
-//ACK for a segment, we set a retransmission timeout timer for the next segment in
-//tcp_clean_rtx_queue()->tcp_rearm_rto().The timeout value for the retransmission timer
-//is set to tp->rto, even though the next segment was transmitted much earlier. So,
-//timeout for the next segment is slightly overestimated by time lapsed since it was
-//transmitted and the ACK for the previous segment arrived.  We can detect early
-//timeout for the retransmit queue head by calling tcp_head_timedout()
+//started only after the ACK for the previous segment was received.. But, early indication of timing out from tcp_head_
+//timedout() can save us from entering into the loss state in the case where the
+//segment is slightly delayed in the network, which is very expensive.
 static inline int tcp_head_timedout(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -2669,7 +2675,7 @@ static inline int tcp_may_undo(struct tcp_sock *tp)
 static int tcp_try_undo_recovery(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-
+	//we check if our retransmission was false
 	//1.try undo from the state
 	if (tcp_may_undo(tp)) 
 	{
@@ -2713,24 +2719,27 @@ static int tcp_try_undo_recovery(struct sock *sk)
 	//will carry DSACK and will differentiate these duplicate ACKs from fast recovery.
 	//In the case where we are not able to exit the loss state, we return with TCP_CA_Loss
 	//state; otherwise we need to process the open state further.
+
 	
 	//2.try to exit the congestion state.
 
-	//2.1.In the case of Reno implementation, we should ACK
+	//In the case of Reno implementation, we should ACK
 	//something beyond tp->high_seq to exit the recovery state. This is done in order to
 	//avoid entering a false fast - recovery state in case the retransmissions for segments
 	//below tp→high_seq generate duplicate ACKs.
+	//in the case of SACK/DSACK implementation, DSACKs are generated for each such duplicate ACKs, so we need not
+	//worry and exit the recovery state as soon as tp?high_seq is ACKed. In the latter
+	//case we are not able to exit the recovery state, so we moderate the congestion
+	//window by calling tcp_moderate_cwnd() to slow down the data transmission rate
+	//until we get ACK beyond tp?high_seq. In the case where we exit the recovery state,
+	//the next step is to continue processing for the open state; otherwise we return with
+	//the recovery state from the routine.
 	//如果不支持SACK,则需要防止虚假的快速重传， 不能立即撤销到OPEN状态，只对拥塞窗口进行微调
-	//2.2.In the case of SACK/DSACK implementation, DSACKs are generated for each such duplicate ACKs, so we need not
-	//worry and exit the recovery state as soon as tp->high_seq is ACKed. 
 	if (tp->snd_una == tp->high_seq && tcp_is_reno(tp)) 
 	{
 		/* Hold old state until something *above* high_seq
 		 * is ACKed. For Reno it is MUST to prevent false
 		 * fast retransmits (RFC2582). SACK TCP is safe. */
-		// not able to exit the recovery state, so we moderate the congestion
-		//window by calling tcp_moderate_cwnd() to slow down the data transmission rate
-		//until we get ACK beyond tp→high_seq.
 		tcp_moderate_cwnd(tp);
 		return 1;
 	}
@@ -3573,7 +3582,6 @@ static int tcp_clean_rtx_queue(struct sock *sk, s32 *seq_rtt_p, int prior_facket
 		tcp_ack_update_rtt(sk, flag, seq_rtt);
 		
 		//We need to reset a retransmit timer on each ACK we receive that advances a send window
-		/* 重置超时重传定时器*/  
 		tcp_rearm_rto(sk);  
 
 		if (tcp_is_reno(tp)) 
