@@ -284,9 +284,7 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 				 * truncation robs us of full link
 				 * utilization.
 				 */
-				tp->snd_cwnd = min(tp->snd_cwnd,
-						   (target_cwnd >>
-						    V_PARAM_SHIFT)+1);
+				tp->snd_cwnd = min(tp->snd_cwnd, (target_cwnd >> V_PARAM_SHIFT)+1);
 
 			}
 			else if (tp->snd_cwnd <= tp->snd_ssthresh) 
@@ -315,7 +313,9 @@ static void tcp_vegas_cong_avoid(struct sock *sk, u32 ack, u32 in_flight, int fl
 					 * in the network, so speed up.
 					 */
 					next_snd_cwnd = old_snd_cwnd + 1;
-				} else {
+				} 
+				else 
+				{
 					/* Sending just as fast as we
 					 * should be.
 					 */
